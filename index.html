@@ -1067,7 +1067,7 @@ projectMenu.append(button);
 }
 let currentPage='home';
 function openPage(page){
-if(currentPage!==page){stopMic('Microphone stopped.');closeNoteMenu();}
+if(currentPage!==page){report('');stopMic('Microphone stopped.');closeNoteMenu();}
 if(currentPage!==page&&(currentPage==='editor'||currentPage==='palette'))stopSound();
 for(const id of ['home','library','import','palette','editor','help','tuner','practice'])find('page-'+id).hidden=id!==page;
 find('home-nav').hidden=page==='home';
