@@ -555,7 +555,6 @@ SOFTWARE.
 <button class="ctrl" data-oc-page="tuner">Ocarina tuner</button>
 <button class="ctrl" data-oc-page="help">Help</button>
 </div>
-<button class="ctrl" id="oc93-resume">Open Score Editor</button>
 </section>
 <section id="oc93-page-library" hidden>
 <h2>Saved scores</h2>
@@ -600,7 +599,7 @@ SOFTWARE.
 <button class="ctrl primary" id="oc93-tutorial">Start visual tutorial</button>
 <dl class="help-list">
 <dt>Main menu</dt>
-<dd><b>Make new score</b> opens a blank editor. <b>Import</b> accepts note names, supported ABC notation, or a project backup. <b>View existing scores</b> lists saved projects. <b>Playable notes</b> opens the keyboard and fingering chart. <b>Open Score Editor</b> returns to the current project. <b>Main menu</b> returns home.</dd>
+<dd><b>Make new score</b> opens a blank editor. <b>Import</b> accepts note names, supported ABC notation, or a project backup. <b>View existing scores</b> lists saved projects. <b>Playable notes</b> opens the keyboard and fingering chart. <b>Main menu</b> returns home.</dd>
 <dt>Score Editor</dt>
 <dd><b>Save score</b> keeps the title, source or author, pitches, and timing in this browser. <b>Export project backup</b> downloads a file you can reimport. <b>Add pasted notes</b> appends pitches. The pitch and beats controls edit the selected note. <b>Insert after selection</b> adds a note, <b>Move earlier/later</b> changes its order, and <b>Remove note</b> or Delete on a selected card deletes it. Right-click a card for note actions. <b>Swap note</b> lets you hear replacement pitches before confirming and keeps the note’s timing.</dd>
 <dt>Playback</dt>
@@ -1095,7 +1094,6 @@ root.querySelectorAll('[data-oc-page]').forEach(button=>{
 button.addEventListener('click',()=>openPage(button.dataset.ocPage));
 });
 find('home').addEventListener('click',()=>openPage('home'));
-find('resume').addEventListener('click',()=>openPage('editor'));
 function stopSound(){
 stopStep();stopMelody();for(const id of [...voices.keys()])end(id);
 }
