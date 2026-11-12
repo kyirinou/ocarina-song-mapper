@@ -536,6 +536,9 @@ SOFTWARE.
 #oc93 .swap-choice{display:grid;justify-items:center;gap:4px;min-width:66px}
 #oc93 .swap-choice svg{width:44px;height:36px}
 #oc93 .swap-choice[aria-pressed=true]{background:var(--viz-accent-bg);border-color:var(--viz-accent)}
+#oc93 .playback-fingering{display:grid;justify-items:center;gap:4px;margin:16px 0;padding:12px;border-radius:10px;background:var(--viz-panel)}
+#oc93 .playback-fingering svg{display:block;width:100%;height:100%}
+#oc93-playback-chart,#oc93-practice-chart{width:min(195px,100%);height:132px}
 #oc93 [hidden]{display:none!important}
 #oc93 .home-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:16px 0}
 #oc93 .home-actions button{text-align:left;padding:15px}
@@ -592,6 +595,7 @@ SOFTWARE.
 <button class="ctrl" id="oc93-practice-stop" disabled>Pause</button><button class="ctrl" id="oc93-practice-back">Back to Score Editor</button></div>
 <p id="oc93-practice-status" role="status"></p>
 </div>
+<div class="playback-fingering"><div id="oc93-practice-chart" role="img" aria-label="Next fingering"></div></div>
 <div id="oc93-practice-grid" class="practice-grid" aria-label="Song fingering sequence"></div>
 </section>
 <section id="oc93-page-help" hidden>
@@ -603,7 +607,7 @@ SOFTWARE.
 <dt>Score Editor</dt>
 <dd><b>Save score</b> keeps the title, source or author, pitches, and timing in this browser. <b>Export project backup</b> downloads a file you can reimport. <b>Add pasted notes</b> appends pitches. The pitch and beats controls edit the selected note. <b>Insert after selection</b> adds a note, <b>Move earlier/later</b> changes its order, and <b>Remove note</b> or Delete on a selected card deletes it. Right-click a card for note actions. <b>Swap note</b> lets you hear replacement pitches before confirming and keeps the note’s timing.</dd>
 <dt>Playback</dt>
-<dd>Click a note block to hear and select it. Press <b>Enter</b> to replay it, then tap again for each next note. Arrow keys move the selection silently. <b>Play all</b> follows the score rhythm and highlights the staff. <b>Stop</b> ends playback, <b>Loop</b> repeats the song, and <b>Playback speed</b> scales the tempo.</dd>
+<dd>Click a note block to hear and select it. Press <b>Enter</b> to replay it, then tap again for each next note. Arrow keys move the selection silently. <b>Play all</b> follows the score rhythm, updates the fingering diagram, and highlights the staff while you scroll freely. <b>Stop</b> ends playback, <b>Loop</b> repeats the song, and <b>Playback speed</b> scales the tempo.</dd>
 <dt>Microphone tools</dt>
 <dd><b>Ocarina tuner</b> shows your pitch, tuning and fingering. <b>Play Along</b> opens a fingering-only practice view. Start the microphone, play the blue fingering, and it turns green when matched. Briefly release between repeated notes. <b>Pause</b> stops listening and keeps your place. <b>Convert sound</b> listens to one note at a time and captures pitches and timing. Leave a short, clear break between repeated pitches. <b>Stop capture</b> shows your take. <b>Add captured notes</b> appends it to the editor for playback and correction.</dd>
 <dt>Recording and notation</dt>
@@ -701,6 +705,9 @@ SOFTWARE.
 </div>
 <div style="display:flex;justify-content:space-between;margin-top:15px;font-size:12px"><span>Playback speed</span><strong id="oc93-speedlabel">100%</strong></div>
 <input id="oc93-speed" type="range" min="40" max="200" step="10" value="100" style="margin-top:8px"/>
+<section class="playback-fingering" aria-label="Playback fingering">
+<div id="oc93-playback-chart" role="img" aria-label="No note playing"></div>
+</section>
 <section class="section" aria-label="Note sequence">
 <h3>Note sequence</h3><div class="keys" id="oc93-sequence"></div>
 <div id="oc93-note-menu" aria-label="Note actions" hidden>
@@ -764,8 +771,8 @@ e.preventDefault();
 const rect=b.getBoundingClientRect();
 openNoteMenu(i,e.clientX||rect.left,e.clientY||rect.bottom);
 });
-b.addEventListener('click',e=>{if(e.detail===0){selectPosition(i);stopStep();start('step',i);stepTimer=setTimeout(stopStep,320)}});
-b.addEventListener('pointerdown',e=>{if(e.button!==0)return;e.preventDefault();selectPosition(i);b.focus({preventScroll:true});b.setPointerCapture(e.pointerId);start('pointer-'+i,i)});
+b.addEventListener('click',e=>{if(e.detail===0){selectPosition(i);showPlaybackFingering(i);stopStep();start('step',i);stepTimer=setTimeout(stopStep,320)}});
+b.addEventListener('pointerdown',e=>{if(e.button!==0)return;e.preventDefault();selectPosition(i);showPlaybackFingering(i);b.focus({preventScroll:true});b.setPointerCapture(e.pointerId);start('pointer-'+i,i)});
 b.addEventListener('pointerup',()=>end('pointer-'+i));b.addEventListener('pointercancel',()=>end('pointer-'+i));b.addEventListener('lostpointercapture',()=>end('pointer-'+i));
 }
 }
@@ -809,10 +816,21 @@ o.type='sine';o.frequency.value=f*h;amp.gain.value=vol;o.connect(amp);amp.connec
 v.frequency.value=5.2;depth.gain.value=f*h*.0017;v.connect(depth);depth.connect(o.frequency);
 o.start(t);v.start(t);oscs.push(o,v);
 }
-voices.set(id,{g,oscs,idx});pads[idx]?.classList.add('active');display.textContent=name(m);info.textContent=(idx<0?name(m):'Note '+(idx+1)+' of '+notes.length)+' · '+f.toFixed(2)+' Hz';
+voices.set(id,{g,oscs,idx});pads[idx]?.classList.add('active');display.textContent=name(m);info.textContent=name(m)+' · '+f.toFixed(2)+' Hz';
 }
 let scorePlaybackIndex=-1;
-function stopMelody(){highlightScore(-1);find('score-playback').hidden=true;run++;if(timer!==null)clearTimeout(timer);timer=null;end('melody');playBtn.textContent='▶ Play all '+notes.length+' notes'}
+function showPlaybackFingering(index){
+const chart=find('playback-chart');
+chart.replaceChildren();
+if(index<0){
+chart.setAttribute('aria-label','No note playing');
+return;
+}
+const pitch=name(notes[index]);
+chart.append(makeFinger(notes[index]));
+chart.setAttribute('aria-label','Fingering for '+pitch);
+}
+function stopMelody(){highlightScore(-1);showPlaybackFingering(-1);find('score-playback').hidden=true;run++;if(timer!==null)clearTimeout(timer);timer=null;end('melody');playBtn.textContent='▶ Play all '+notes.length+' notes'}
 function play(){
 if(!notes.length)return;
 if(micSession?.mode==='convert'){report('Stop sound capture before playing the score.');return;}
@@ -820,13 +838,12 @@ if(recording){report('Finish the timing recording before playing the whole score
 stopStep();stopMelody();
 if(find('score').hidden)showScore(false);
 find('score-playback').hidden=false;
-find('score').scrollIntoView({block:'start'});
 const token=run;let idx=0;playBtn.textContent='♪ Playing…';
 function next(){
 if(token!==run)return;
 if(idx>=notes.length){if(loop)idx=0;else{stopMelody();info.textContent='Melody complete · '+notes.length+' notes';return}}
 const i=idx,duration=(exactIntervals[i]??(60000/scoreTempo)*(scoreSixteenths[i]/4))/(+speed.value/100);
-start('melody',i);highlightScore(i);bar.style.width=((i+1)/notes.length*100)+'%';idx++;
+start('melody',i);highlightScore(i);showPlaybackFingering(i);bar.style.width=((i+1)/notes.length*100)+'%';idx++;
 timer=setTimeout(()=>{end('melody');timer=setTimeout(next,duration*.1)},duration*.9);
 }
 next();
@@ -863,6 +880,7 @@ if(!notes.length||(playedSelection&&position===notes.length-1))return;
 if(playedSelection)selectPosition(position+1);
 stopMelody();stopStep();
 start('step',position);
+showPlaybackFingering(position);
 recordStep(position);
 stepTimer=setTimeout(stopStep,320);
 pads[position].scrollIntoView({block:'nearest'});
@@ -938,18 +956,13 @@ const tokens=entries.map(entry=>abcPitch(entry.pitch)+Math.round(entry.beats*4))
 return ['X:1','T:'+(projectName.value.trim()||'Untitled song'),...(authorInput.value.trim()?['C:'+authorInput.value.trim()]:[]),'M:none','L:1/16','Q:1/4='+bpm,'K:C clef=treble',
 ...Array.from({length:Math.ceil(tokens.length/12)},(_,i)=>tokens.slice(i*12,i*12+12).join(' '))].join('\n');
 }
-let renderedScore='', scoreGroups=new Map(), followedSystem=null;
+let renderedScore='', scoreGroups=new Map();
 function highlightScore(index){
 if(scorePlaybackIndex===index)return;
 for(const glyph of scoreGroups.get(scorePlaybackIndex)??[])glyph.classList.remove('playing-note');
 scorePlaybackIndex=index;
 if(!find('score').hidden&&take.length)drawStaff();
-if(index<0){followedSystem=null;return;}
-const system=scoreGroups.get(index)?.[0]?.closest('svg');
-if(system&&system!==followedSystem){
-if(followedSystem)system.scrollIntoView({block:'nearest'});
-followedSystem=system;
-}
+
 }
 function engravedScore(entries,bpm=scorePlaybackIndex<0?tempo():scoreTempo){
 const header=['X:1','M:4/4','L:1/16','Q:1/4='+bpm,'K:C clef=treble'];
@@ -1610,6 +1623,13 @@ frequency.toFixed(1)+' Hz · '+tuning+(midi<69||midi>89?' · Outside the 12-hole
 }
 find('tuner-start').addEventListener('click',()=>{showTunerPitch(null,0,0);listenMic('tuner',showTunerPitch);});
 find('tuner-stop').addEventListener('click',()=>{showTunerPitch(null,0,0);stopMic('Microphone stopped.');});
+function showPracticeFingering(){
+const chart=find('practice-chart');
+chart.replaceChildren();
+const midi=notes[practiceIndex];
+chart.setAttribute('aria-label',midi===undefined?'Practice complete':'Next fingering: '+name(midi));
+if(midi!==undefined)chart.append(makeFinger(midi));
+}
 function showPractice(){
 if(!notes.length){report('Add notes before starting Play Along.');return;}
 openPage('practice');
@@ -1619,7 +1639,7 @@ const card=document.createElement('div');card.className='practice-card';
 const label=document.createElement('span');label.textContent=i+1;
 card.append(makeFinger(midi),label);grid.append(card);return card;
 });
-practiceIndex=0;practiceCards[0].classList.add('practice-next');
+practiceIndex=0;practiceCards[0].classList.add('practice-next');showPracticeFingering();
 find('practice-status').textContent='Start the microphone, then follow the fingering outlined in blue.';
 }
 find('play-along').addEventListener('click',showPractice);
@@ -1634,6 +1654,7 @@ if(midi===previous||Math.abs(cents)>40)return;
 previous=midi;
 if(midi!==notes[practiceIndex])return;
 const card=practiceCards[practiceIndex++];
+showPracticeFingering();
 card.classList.remove('practice-next');card.classList.add('practice-hit');
 const next=practiceCards[practiceIndex];
 if(!next){stopMic('Complete. You played every fingering.');return;}
