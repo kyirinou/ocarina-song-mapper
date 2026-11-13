@@ -19,7 +19,7 @@ return match?16*Number(match[1])/Number(match[2]):0;
 const ScoreModel={
 validate(p){
 return Boolean(p&&typeof p.id==='string'&&typeof p.title==='string'&&
-(p.author===undefined||typeof p.author==='string')&&Array.isArray(p.notes)&&p.notes.every(Music.playable)&&
+(p.author===undefined||typeof p.author==='string')&&Array.isArray(p.notes)&&p.notes.every(Music.validPitch)&&
 Array.isArray(p.lengths)&&p.lengths.length===p.notes.length&&p.lengths.every(n=>Number.isFinite(n)&&n>0)&&
 Number.isFinite(p.tempo)&&p.tempo>=20&&p.tempo<=400&&Array.isArray(p.intervals)&&
 (p.tempoMap===undefined||(Array.isArray(p.tempoMap)&&p.tempoMap.every((mark,i)=>mark&&Number.isFinite(mark.tick)&&mark.tick>=0&&Number.isFinite(mark.bpm)&&mark.bpm>0&&(!i||mark.tick>p.tempoMap[i-1].tick))))&&
@@ -94,6 +94,7 @@ function stopSound(){
 stopStep();stopMelody();for(const id of [...voices.keys()])end(id);
 }
 function refreshSong(index=0){
+find("range-warning").hidden=score.pitches.every(Music.playable);
 renderPads();selectPosition(index);
 playBtn.disabled=!score.events.length;
 playBtn.textContent='▶ Play all '+score.events.length+' notes';
@@ -146,6 +147,11 @@ if(canReplace()){loadProject({...project,id:newId()});draftChanged=true;openPage
 function syncEdit(){
 const hasNote=score.events.length>0;
 pitchEditor.disabled=!hasNote;beatsEditor.disabled=!hasNote;
+pitchEditor.querySelector('[data-outside]')?.remove();
+if(hasNote&&!Music.playable(score.events[position].pitch)){
+const option=new Option(name(score.events[position].pitch)+' (outside A4–F6)',score.events[position].pitch);
+option.dataset.outside='';pitchEditor.add(option);
+}
 if(hasNote){pitchEditor.value=score.events[position].pitch??'rest';beatsEditor.value=score.events[position].ticks/4;}
 find('earlier').disabled=!hasNote||position===0;
 find('later').disabled=!hasNote||position===score.events.length-1;
@@ -156,7 +162,7 @@ stopStep();start('step',-1,m);stepTimer=setTimeout(stopStep,320);
 }
 const paletteKeys='QWERTYUIOPASDFGHJKLZXCVBNM'.slice(0,21).split('');
 const paletteButtons=[];
-function fingeringCode(midi){if(midi===null)return "r";return String.fromCharCode(65+midi-69);}
+function fingeringCode(midi){if(midi===null)return "r";return Music.playable(midi)?String.fromCharCode(65+midi-69):"?";}
 function selectFingering(midi,play=false){
 for(const [i,button] of paletteButtons.entries())button.setAttribute('aria-pressed',String(i===midi-69));
 const pitch=name(midi);

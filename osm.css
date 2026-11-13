@@ -111,3 +111,5 @@ body:has(#oc93-page-home:not([hidden]))>h1{text-align:center;font-size:clamp(2.5
 #oc93 .project-list button{text-align:left}
 #oc93 .editor-meta label{display:grid;gap:4px;flex:1;min-width:170px}
 #oc93 .editor-meta input{width:100%;box-sizing:border-box}
+
+#oc93 .note.outside-range{background:#fff1ae;border-color:#a47713;color:#382900}

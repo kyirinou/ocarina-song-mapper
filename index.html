@@ -483,9 +483,9 @@ SOFTWARE.
 <button class="ctrl" id="oc93-split">Split</button><button class="ctrl" id="oc93-merge">Merge</button></div>
 <details class="osm-panel"><summary>Timeline and arrangement</summary>
 <div class="toolbar"><label>Tempo <input type="number" id="oc93-editor-tempo" min="20" max="400"></label><button class="ctrl" id="oc93-tempo-set">Apply tempo</button><label>Time signature <input id="oc93-meter" type="text" size="5" value="4/4"></label><label>Key signature <select id="oc93-score-key"></select></label>
-<label>Semitones <input type="number" id="oc93-transpose-steps" value="0" min="-24" max="24"></label><button class="ctrl" id="oc93-transpose">Transpose</button><button class="ctrl" id="oc93-octave-up">Selected note + octave</button><button class="ctrl" id="oc93-octave-down">Selected note − octave</button></div>
+<label>Semitones <input type="number" id="oc93-transpose-steps" value="0" min="-24" max="24"></label><button class="ctrl" id="oc93-transpose">Transpose</button><button class="ctrl" id="oc93-semitone-up">Selected + semitone</button><button class="ctrl" id="oc93-semitone-down">Selected − semitone</button><button class="ctrl" id="oc93-octave-up">Selected note + octave</button><button class="ctrl" id="oc93-octave-down">Selected note − octave</button></div>
 <div id="oc93-timeline" style="overflow:auto;max-height:410px"></div></details>
-<h3>Note sequence</h3><div class="keys" id="oc93-sequence"></div>
+<h3>Note sequence</h3><p id="oc93-range-warning" hidden>Yellow notes are outside A4–F6. Select a note and use the shifts under Timeline and arrangement.</p><div class="keys" id="oc93-sequence"></div>
 <div id="oc93-note-menu" aria-label="Note actions" hidden>
 <button class="ctrl" id="oc93-note-menu-swap">Swap note…</button>
 <button class="ctrl" id="oc93-note-menu-hear">Hear note</button>

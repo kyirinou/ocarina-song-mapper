@@ -218,6 +218,7 @@ practiceExpanded=!practiceExpanded;updatePracticeWindow();
 find('practice-grid').focus({preventScroll:true});
 });
 function showPractice(pitches,back=practiceReturn,lengths=pitches.map(()=>4)){
+if(!pitches.every(Music.playable)){report("Shift yellow notes into A4–F6 before starting Play Along.");return;}
 practiceReturn=back;
 if(!pitches.length){report('Add notes before starting Play Along.');return;}
 openPage('practice');

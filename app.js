@@ -1,4 +1,25 @@
 (()=>{
+const Music = {
+  tempo(onsets) {
+    const gaps=onsets.slice(1).map((t,i)=>t-onsets[i]).filter(t=>t>=160&&t<=1600);
+    if(!gaps.length)return 120;
+    let best={cost:Infinity,bpm:120};
+    for(let bpm=55;bpm<=190;bpm++){
+      const beat=60000/bpm;
+      const cost=gaps.reduce((sum,ms)=>{
+        const q=Math.max(.25,Math.round(ms/beat*4)/4);
+        return sum+Math.abs(ms/beat-q)+.015*Math.abs(Math.log2(q));
+      },0)/gaps.length+.0003*Math.abs(bpm-110);
+      if(cost<best.cost)best={cost,bpm};
+    }
+    return best.bpm;
+  },
+  transpose(pitches,steps){return pitches.map(p=>p===null?null:p+steps);},
+  ticks(ms,bpm){return Math.max(1,Math.round(ms*bpm/15000));},
+  validPitch(p){return p===null||(Number.isInteger(p)&&p>=12&&p<=127);},
+  playable(p){return p===null||(Number.isInteger(p)&&p>=69&&p<=89);}
+};
+
 const root=document.getElementById('oc93');if(root.dataset.ready)return;root.dataset.ready='1';
 const pcs={C:0,D:2,E:4,F:5,G:7,A:9,B:11},names=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
 const toMidi=s=>{const m=s.match(/^([A-G])(#?)(\d)$/);return (+m[3]+1)*12+pcs[m[1]]+(m[2]?1:0)};
@@ -23,8 +44,9 @@ pads.length=0;grid.replaceChildren();
 for(let i=0;i<score.events.length;i++){
 const b=document.createElement('button');
 b.type='button';b.className='note';
+if(!Music.playable(score.events[i].pitch))b.classList.add('outside-range');
 b.innerHTML='<span class="num">'+(i+1)+'</span><span class="note-fingering" aria-hidden="true">'+(score.events[i].pitch===null?'—':fingeringCode(score.events[i].pitch))+'</span><span class="pitch">'+name(score.events[i].pitch)+'</span>';
-b.setAttribute('aria-label','Note '+(i+1)+' '+name(score.events[i].pitch));
+b.setAttribute('aria-label','Note '+(i+1)+' '+name(score.events[i].pitch)+(Music.playable(score.events[i].pitch)?'':' (outside A4–F6)'));
 grid.append(b);pads.push(b);
 b.addEventListener('contextmenu',e=>{
 e.preventDefault();
@@ -291,7 +313,7 @@ function abcPitch(pitch){
 if(pitch==='Rest')return 'z';
 const [,letter,sharp,octave]=pitch.match(/^([A-G])(#?)([0-9])$/);
 const high=Number(octave)>=5;
-return (sharp?'^':'=')+(high?letter.toLowerCase():letter)+(high?"'".repeat(Number(octave)-5):'');
+return (sharp?'^':'=')+(high?letter.toLowerCase():letter)+(high?"'".repeat(Number(octave)-5):','.repeat(4-Number(octave)));
 }
 function abcLength(value){
 if(Number.isInteger(value))return String(value);
@@ -433,7 +455,7 @@ return match?16*Number(match[1])/Number(match[2]):0;
 const ScoreModel={
 validate(p){
 return Boolean(p&&typeof p.id==='string'&&typeof p.title==='string'&&
-(p.author===undefined||typeof p.author==='string')&&Array.isArray(p.notes)&&p.notes.every(Music.playable)&&
+(p.author===undefined||typeof p.author==='string')&&Array.isArray(p.notes)&&p.notes.every(Music.validPitch)&&
 Array.isArray(p.lengths)&&p.lengths.length===p.notes.length&&p.lengths.every(n=>Number.isFinite(n)&&n>0)&&
 Number.isFinite(p.tempo)&&p.tempo>=20&&p.tempo<=400&&Array.isArray(p.intervals)&&
 (p.tempoMap===undefined||(Array.isArray(p.tempoMap)&&p.tempoMap.every((mark,i)=>mark&&Number.isFinite(mark.tick)&&mark.tick>=0&&Number.isFinite(mark.bpm)&&mark.bpm>0&&(!i||mark.tick>p.tempoMap[i-1].tick))))&&
@@ -508,6 +530,7 @@ function stopSound(){
 stopStep();stopMelody();for(const id of [...voices.keys()])end(id);
 }
 function refreshSong(index=0){
+find("range-warning").hidden=score.pitches.every(Music.playable);
 renderPads();selectPosition(index);
 playBtn.disabled=!score.events.length;
 playBtn.textContent='▶ Play all '+score.events.length+' notes';
@@ -560,6 +583,11 @@ if(canReplace()){loadProject({...project,id:newId()});draftChanged=true;openPage
 function syncEdit(){
 const hasNote=score.events.length>0;
 pitchEditor.disabled=!hasNote;beatsEditor.disabled=!hasNote;
+pitchEditor.querySelector('[data-outside]')?.remove();
+if(hasNote&&!Music.playable(score.events[position].pitch)){
+const option=new Option(name(score.events[position].pitch)+' (outside A4–F6)',score.events[position].pitch);
+option.dataset.outside='';pitchEditor.add(option);
+}
 if(hasNote){pitchEditor.value=score.events[position].pitch??'rest';beatsEditor.value=score.events[position].ticks/4;}
 find('earlier').disabled=!hasNote||position===0;
 find('later').disabled=!hasNote||position===score.events.length-1;
@@ -570,7 +598,7 @@ stopStep();start('step',-1,m);stepTimer=setTimeout(stopStep,320);
 }
 const paletteKeys='QWERTYUIOPASDFGHJKLZXCVBNM'.slice(0,21).split('');
 const paletteButtons=[];
-function fingeringCode(midi){if(midi===null)return "r";return String.fromCharCode(65+midi-69);}
+function fingeringCode(midi){if(midi===null)return "r";return Music.playable(midi)?String.fromCharCode(65+midi-69):"?";}
 function selectFingering(midi,play=false){
 for(const [i,button] of paletteButtons.entries())button.setAttribute('aria-pressed',String(i===midi-69));
 const pitch=name(midi);
@@ -692,7 +720,7 @@ const source=input.trim().replace(/\\(?=\r?$)/gm,'').replace(/\\=/g,'=');
 if(!source)throw Error('Paste note names or ABC notation first.');
 if(!/^X:/m.test(source)){
 const tokens=source.toUpperCase().replace(/♯/g,'#').split(/[\s,–—-]+/).filter(Boolean);
-if(!tokens.every(token=>/^[A-G]#?[46]$|^[A-G]#?5$/.test(token)))throw Error('Use note names such as A4 - D#5 - C5 - F6.');
+if(!tokens.every(token=>/^[A-G]#?[0-9]$/.test(token)))throw Error('Use note names such as A4 - D#5 - C5 - F6.');
 return {notes:tokens.map(toMidi),lengths:tokens.map(()=>4),tempo:130,intervals:[]};
 }
 const abc=source.split(/^Sequence note,/m)[0];
@@ -710,7 +738,7 @@ if(/^X:/m.test(find('import-text').value))await loadNotation();
 if(currentPage!=='import')return;
 const parsed=parseSong(find('import-text').value);
 const project={...parsed,id:newId(),title:parsed.title||'Imported score',author:parsed.author||''};
-if(!project.notes.length||!validProject(project))throw Error('Use playable pitches A4 through F6, positive durations, and a tempo from 20 to 400 BPM.');
+if(!project.notes.length||!validProject(project))throw Error('Use valid note names, positive durations, and a tempo from 20 to 400 BPM.');
 if(recording){report('Finish recording before importing a song.');return;}
 if(!canReplace())return;
 loadProject(project);draftChanged=true;openPage('editor');
@@ -824,6 +852,7 @@ layoutSequence=sequence;tabPreview.replaceChildren();
 if(reset){tabTitle.value='';tabAuthor.value='';}
 }
 function tabRows(){
+if(!score.pitches.every(Music.playable))throw Error("Shift yellow notes into A4–F6 before exporting fingering tabs.");
 if(!score.events.length)throw Error('Add notes before exporting tabs.');
 const value=tabLayout.value.replace(/\r/g,'');
 if(value.replace(/\s/g,'')!==layoutSequence)throw Error('Keep the note codes in order. Edit pitches in the Score Editor and use this box to add spaces or line breaks.');
@@ -831,9 +860,9 @@ let index=0;
 return value.split('\n').map(row=>[...row.trimEnd()].map(char=>char===' '||char==='\t'?null:index++));
 }
 function makeFinger(midi){
-if(midi===null){
+if(midi===null||!Music.playable(midi)){
 const svg=document.createElementNS(svgNS,'svg');svg.setAttribute('width',60);svg.setAttribute('height',40);svg.setAttribute('viewBox','0 0 60 40');
-const text=document.createElementNS(svgNS,'text');text.setAttribute('x',12);text.setAttribute('y',24);text.textContent='Rest';svg.append(text);return svg;
+const text=document.createElementNS(svgNS,'text');text.setAttribute('x',12);text.setAttribute('y',24);text.textContent=midi===null?'Rest':name(midi);svg.append(text);return svg;
 }
 const [width,height,path]=fingerPaths[midi-69];
 const svg=document.createElementNS(svgNS,'svg');
@@ -1267,6 +1296,7 @@ practiceExpanded=!practiceExpanded;updatePracticeWindow();
 find('practice-grid').focus({preventScroll:true});
 });
 function showPractice(pitches,back=practiceReturn,lengths=pitches.map(()=>4)){
+if(!pitches.every(Music.playable)){report("Shift yellow notes into A4–F6 before starting Play Along.");return;}
 practiceReturn=back;
 if(!pitches.length){report('Add notes before starting Play Along.');return;}
 openPage('practice');
@@ -2041,26 +2071,6 @@ find('sound-done').addEventListener('click',()=>soundSettings.close());
 soundSettings.addEventListener('close',stopSoundSample);
 
 
-const Music = {
-  tempo(onsets) {
-    const gaps=onsets.slice(1).map((t,i)=>t-onsets[i]).filter(t=>t>=160&&t<=1600);
-    if(!gaps.length)return 120;
-    let best={cost:Infinity,bpm:120};
-    for(let bpm=55;bpm<=190;bpm++){
-      const beat=60000/bpm;
-      const cost=gaps.reduce((sum,ms)=>{
-        const q=Math.max(.25,Math.round(ms/beat*4)/4);
-        return sum+Math.abs(ms/beat-q)+.015*Math.abs(Math.log2(q));
-      },0)/gaps.length+.0003*Math.abs(bpm-110);
-      if(cost<best.cost)best={cost,bpm};
-    }
-    return best.bpm;
-  },
-  transpose(pitches,steps){return pitches.map(p=>p===null?null:p+steps);},
-  ticks(ms,bpm){return Math.max(1,Math.round(ms*bpm/15000));},
-  playable(p){return p===null||(Number.isInteger(p)&&p>=69&&p<=89);}
-};
-
 const historyPast=[], historyFuture=[];
 let lastScore;
 function captureEdit(){
@@ -2114,16 +2124,18 @@ find('merge').onclick=()=>{
 function shiftSelectedOctave(steps){
 if(recording||!score.events.length||score.events[position].pitch===null)return;
 const pitch=score.events[position].pitch+steps;
-if(!Music.playable(pitch)){report('That octave is outside the playable A4–F6 range.');return;}
+if(!Music.validPitch(pitch)){report("That shift exceeds the supported pitch range.");return;}
 score.events[position].pitch=pitch;edited(position);previewPitch(pitch);
 }
+find('semitone-up').onclick=()=>shiftSelectedOctave(1);
+find('semitone-down').onclick=()=>shiftSelectedOctave(-1);
 find('octave-up').onclick=()=>shiftSelectedOctave(12);
 find('octave-down').onclick=()=>shiftSelectedOctave(-12);
 find('transpose').onclick=()=>{
   const steps=Number(find('transpose-steps').value);
   if(!Number.isInteger(steps)||!score.events.length||recording)return;
   const shifted=Music.transpose(score.pitches,steps);
-  if(!shifted.every(Music.playable)){report('That shift would put notes outside A4–F6. Try fewer semitones.');return;}
+  if(!shifted.every(Music.validPitch)){report('That shift exceeds the supported pitch range.');return;}
   shifted.forEach((pitch,i)=>{score.events[i].pitch=pitch;});edited(position);
 };
 for(const key of Object.keys(keySignatures))find('score-key').add(new Option(key+' major',key));
@@ -2146,7 +2158,7 @@ function drawTimeline(){
   let tick=0;
   score.pitches.forEach((m,i)=>{
     const card=document.createElement('button');card.className='ctrl';
-    card.style.left=tick*9+'px';card.style.top=(m===null?21:89-m)*18+'px';
+    card.style.left=tick*9+'px';card.style.top=(m===null?21:Math.min(21,Math.max(0,89-m)))*18+'px';
     card.style.width=Math.max(16,score.events[i].ticks*9)+'px';
     card.textContent=m===null?'Rest':name(m);card.title='Note '+(i+1)+' · '+card.textContent;
     card.onclick=()=>{selectPosition(i);showPlaybackFingering(i);if(m!==null)previewPitch(m);};

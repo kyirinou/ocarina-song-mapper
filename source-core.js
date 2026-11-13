@@ -1,3 +1,24 @@
+const Music = {
+  tempo(onsets) {
+    const gaps=onsets.slice(1).map((t,i)=>t-onsets[i]).filter(t=>t>=160&&t<=1600);
+    if(!gaps.length)return 120;
+    let best={cost:Infinity,bpm:120};
+    for(let bpm=55;bpm<=190;bpm++){
+      const beat=60000/bpm;
+      const cost=gaps.reduce((sum,ms)=>{
+        const q=Math.max(.25,Math.round(ms/beat*4)/4);
+        return sum+Math.abs(ms/beat-q)+.015*Math.abs(Math.log2(q));
+      },0)/gaps.length+.0003*Math.abs(bpm-110);
+      if(cost<best.cost)best={cost,bpm};
+    }
+    return best.bpm;
+  },
+  transpose(pitches,steps){return pitches.map(p=>p===null?null:p+steps);},
+  ticks(ms,bpm){return Math.max(1,Math.round(ms*bpm/15000));},
+  validPitch(p){return p===null||(Number.isInteger(p)&&p>=12&&p<=127);},
+  playable(p){return p===null||(Number.isInteger(p)&&p>=69&&p<=89);}
+};
+
 const root=document.getElementById('oc93');if(root.dataset.ready)return;root.dataset.ready='1';
 const pcs={C:0,D:2,E:4,F:5,G:7,A:9,B:11},names=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
 const toMidi=s=>{const m=s.match(/^([A-G])(#?)(\d)$/);return (+m[3]+1)*12+pcs[m[1]]+(m[2]?1:0)};
@@ -22,8 +43,9 @@ pads.length=0;grid.replaceChildren();
 for(let i=0;i<score.events.length;i++){
 const b=document.createElement('button');
 b.type='button';b.className='note';
+if(!Music.playable(score.events[i].pitch))b.classList.add('outside-range');
 b.innerHTML='<span class="num">'+(i+1)+'</span><span class="note-fingering" aria-hidden="true">'+(score.events[i].pitch===null?'—':fingeringCode(score.events[i].pitch))+'</span><span class="pitch">'+name(score.events[i].pitch)+'</span>';
-b.setAttribute('aria-label','Note '+(i+1)+' '+name(score.events[i].pitch));
+b.setAttribute('aria-label','Note '+(i+1)+' '+name(score.events[i].pitch)+(Music.playable(score.events[i].pitch)?'':' (outside A4–F6)'));
 grid.append(b);pads.push(b);
 b.addEventListener('contextmenu',e=>{
 e.preventDefault();

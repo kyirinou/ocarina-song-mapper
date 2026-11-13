@@ -57,7 +57,7 @@ const source=input.trim().replace(/\\(?=\r?$)/gm,'').replace(/\\=/g,'=');
 if(!source)throw Error('Paste note names or ABC notation first.');
 if(!/^X:/m.test(source)){
 const tokens=source.toUpperCase().replace(/♯/g,'#').split(/[\s,–—-]+/).filter(Boolean);
-if(!tokens.every(token=>/^[A-G]#?[46]$|^[A-G]#?5$/.test(token)))throw Error('Use note names such as A4 - D#5 - C5 - F6.');
+if(!tokens.every(token=>/^[A-G]#?[0-9]$/.test(token)))throw Error('Use note names such as A4 - D#5 - C5 - F6.');
 return {notes:tokens.map(toMidi),lengths:tokens.map(()=>4),tempo:130,intervals:[]};
 }
 const abc=source.split(/^Sequence note,/m)[0];
@@ -75,7 +75,7 @@ if(/^X:/m.test(find('import-text').value))await loadNotation();
 if(currentPage!=='import')return;
 const parsed=parseSong(find('import-text').value);
 const project={...parsed,id:newId(),title:parsed.title||'Imported score',author:parsed.author||''};
-if(!project.notes.length||!validProject(project))throw Error('Use playable pitches A4 through F6, positive durations, and a tempo from 20 to 400 BPM.');
+if(!project.notes.length||!validProject(project))throw Error('Use valid note names, positive durations, and a tempo from 20 to 400 BPM.');
 if(recording){report('Finish recording before importing a song.');return;}
 if(!canReplace())return;
 loadProject(project);draftChanged=true;openPage('editor');

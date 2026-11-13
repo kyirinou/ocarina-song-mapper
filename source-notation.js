@@ -2,7 +2,7 @@ function abcPitch(pitch){
 if(pitch==='Rest')return 'z';
 const [,letter,sharp,octave]=pitch.match(/^([A-G])(#?)([0-9])$/);
 const high=Number(octave)>=5;
-return (sharp?'^':'=')+(high?letter.toLowerCase():letter)+(high?"'".repeat(Number(octave)-5):'');
+return (sharp?'^':'=')+(high?letter.toLowerCase():letter)+(high?"'".repeat(Number(octave)-5):','.repeat(4-Number(octave)));
 }
 function abcLength(value){
 if(Number.isInteger(value))return String(value);

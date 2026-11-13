@@ -1,23 +1,3 @@
-const Music = {
-  tempo(onsets) {
-    const gaps=onsets.slice(1).map((t,i)=>t-onsets[i]).filter(t=>t>=160&&t<=1600);
-    if(!gaps.length)return 120;
-    let best={cost:Infinity,bpm:120};
-    for(let bpm=55;bpm<=190;bpm++){
-      const beat=60000/bpm;
-      const cost=gaps.reduce((sum,ms)=>{
-        const q=Math.max(.25,Math.round(ms/beat*4)/4);
-        return sum+Math.abs(ms/beat-q)+.015*Math.abs(Math.log2(q));
-      },0)/gaps.length+.0003*Math.abs(bpm-110);
-      if(cost<best.cost)best={cost,bpm};
-    }
-    return best.bpm;
-  },
-  transpose(pitches,steps){return pitches.map(p=>p===null?null:p+steps);},
-  ticks(ms,bpm){return Math.max(1,Math.round(ms*bpm/15000));},
-  playable(p){return p===null||(Number.isInteger(p)&&p>=69&&p<=89);}
-};
-
 const historyPast=[], historyFuture=[];
 let lastScore;
 function captureEdit(){
@@ -71,16 +51,18 @@ find('merge').onclick=()=>{
 function shiftSelectedOctave(steps){
 if(recording||!score.events.length||score.events[position].pitch===null)return;
 const pitch=score.events[position].pitch+steps;
-if(!Music.playable(pitch)){report('That octave is outside the playable A4–F6 range.');return;}
+if(!Music.validPitch(pitch)){report("That shift exceeds the supported pitch range.");return;}
 score.events[position].pitch=pitch;edited(position);previewPitch(pitch);
 }
+find('semitone-up').onclick=()=>shiftSelectedOctave(1);
+find('semitone-down').onclick=()=>shiftSelectedOctave(-1);
 find('octave-up').onclick=()=>shiftSelectedOctave(12);
 find('octave-down').onclick=()=>shiftSelectedOctave(-12);
 find('transpose').onclick=()=>{
   const steps=Number(find('transpose-steps').value);
   if(!Number.isInteger(steps)||!score.events.length||recording)return;
   const shifted=Music.transpose(score.pitches,steps);
-  if(!shifted.every(Music.playable)){report('That shift would put notes outside A4–F6. Try fewer semitones.');return;}
+  if(!shifted.every(Music.validPitch)){report('That shift exceeds the supported pitch range.');return;}
   shifted.forEach((pitch,i)=>{score.events[i].pitch=pitch;});edited(position);
 };
 for(const key of Object.keys(keySignatures))find('score-key').add(new Option(key+' major',key));
@@ -103,7 +85,7 @@ function drawTimeline(){
   let tick=0;
   score.pitches.forEach((m,i)=>{
     const card=document.createElement('button');card.className='ctrl';
-    card.style.left=tick*9+'px';card.style.top=(m===null?21:89-m)*18+'px';
+    card.style.left=tick*9+'px';card.style.top=(m===null?21:Math.min(21,Math.max(0,89-m)))*18+'px';
     card.style.width=Math.max(16,score.events[i].ticks*9)+'px';
     card.textContent=m===null?'Rest':name(m);card.title='Note '+(i+1)+' · '+card.textContent;
     card.onclick=()=>{selectPosition(i);showPlaybackFingering(i);if(m!==null)previewPitch(m);};

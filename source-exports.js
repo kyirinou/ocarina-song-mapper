@@ -68,6 +68,7 @@ layoutSequence=sequence;tabPreview.replaceChildren();
 if(reset){tabTitle.value='';tabAuthor.value='';}
 }
 function tabRows(){
+if(!score.pitches.every(Music.playable))throw Error("Shift yellow notes into A4–F6 before exporting fingering tabs.");
 if(!score.events.length)throw Error('Add notes before exporting tabs.');
 const value=tabLayout.value.replace(/\r/g,'');
 if(value.replace(/\s/g,'')!==layoutSequence)throw Error('Keep the note codes in order. Edit pitches in the Score Editor and use this box to add spaces or line breaks.');
@@ -75,9 +76,9 @@ let index=0;
 return value.split('\n').map(row=>[...row.trimEnd()].map(char=>char===' '||char==='\t'?null:index++));
 }
 function makeFinger(midi){
-if(midi===null){
+if(midi===null||!Music.playable(midi)){
 const svg=document.createElementNS(svgNS,'svg');svg.setAttribute('width',60);svg.setAttribute('height',40);svg.setAttribute('viewBox','0 0 60 40');
-const text=document.createElementNS(svgNS,'text');text.setAttribute('x',12);text.setAttribute('y',24);text.textContent='Rest';svg.append(text);return svg;
+const text=document.createElementNS(svgNS,'text');text.setAttribute('x',12);text.setAttribute('y',24);text.textContent=midi===null?'Rest':name(midi);svg.append(text);return svg;
 }
 const [width,height,path]=fingerPaths[midi-69];
 const svg=document.createElementNS(svgNS,'svg');
