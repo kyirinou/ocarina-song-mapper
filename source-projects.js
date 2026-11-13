@@ -146,6 +146,7 @@ if(canReplace()){loadProject({...project,id:newId()});draftChanged=true;openPage
 });
 function syncEdit(){
 const hasNote=score.events.length>0;
+find('pitch-shifts').hidden=!hasNote||score.events[position].pitch===null;
 pitchEditor.disabled=!hasNote;beatsEditor.disabled=!hasNote;
 pitchEditor.querySelector('[data-outside]')?.remove();
 if(hasNote&&!Music.playable(score.events[position].pitch)){

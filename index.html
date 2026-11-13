@@ -302,7 +302,7 @@ SOFTWARE.
 </section>
 <section id="oc93-page-import" hidden>
 <h2>Import a score</h2>
-<p>Start a score from note names, ABC notation, or a project backup.</p>
+<p>Paste note names or ABC notation, or open a project backup. Notes outside A4–F6 appear in yellow so you can shift them in the editor.</p>
 <textarea id="oc93-import-text" rows="6" aria-label="Notes or ABC notation" placeholder="A4 - D#5 - C5 - F6, or paste ABC notation"></textarea>
 <div class="toolbar"><button class="ctrl primary" id="oc93-import">Import into a new score</button>
 <label>Import project backup <input id="oc93-restore" type="file" accept=".json"></label></div>
@@ -483,9 +483,9 @@ SOFTWARE.
 <button class="ctrl" id="oc93-split">Split</button><button class="ctrl" id="oc93-merge">Merge</button></div>
 <details class="osm-panel"><summary>Timeline and arrangement</summary>
 <div class="toolbar"><label>Tempo <input type="number" id="oc93-editor-tempo" min="20" max="400"></label><button class="ctrl" id="oc93-tempo-set">Apply tempo</button><label>Time signature <input id="oc93-meter" type="text" size="5" value="4/4"></label><label>Key signature <select id="oc93-score-key"></select></label>
-<label>Semitones <input type="number" id="oc93-transpose-steps" value="0" min="-24" max="24"></label><button class="ctrl" id="oc93-transpose">Transpose</button><button class="ctrl" id="oc93-semitone-up">Selected + semitone</button><button class="ctrl" id="oc93-semitone-down">Selected − semitone</button><button class="ctrl" id="oc93-octave-up">Selected note + octave</button><button class="ctrl" id="oc93-octave-down">Selected note − octave</button></div>
+<label>Semitones <input type="number" id="oc93-transpose-steps" value="0" min="-24" max="24"></label><button class="ctrl" id="oc93-transpose">Transpose</button></div>
 <div id="oc93-timeline" style="overflow:auto;max-height:410px"></div></details>
-<h3>Note sequence</h3><p id="oc93-range-warning" hidden>Yellow notes are outside A4–F6. Select a note and use the shifts under Timeline and arrangement.</p><div class="keys" id="oc93-sequence"></div>
+<h3>Note sequence</h3><p id="oc93-range-warning" hidden>Yellow notes are outside A4–F6. Click a note and use the pitch shifts below.</p><div id="oc93-pitch-shifts" class="toolbar" aria-label="Shift selected pitch" hidden><button class="ctrl" id="oc93-semitone-up">Selected + semitone</button><button class="ctrl" id="oc93-semitone-down">Selected − semitone</button><button class="ctrl" id="oc93-octave-up">Selected note + octave</button><button class="ctrl" id="oc93-octave-down">Selected note − octave</button></div><div class="keys" id="oc93-sequence"></div>
 <div id="oc93-note-menu" aria-label="Note actions" hidden>
 <button class="ctrl" id="oc93-note-menu-swap">Swap note…</button>
 <button class="ctrl" id="oc93-note-menu-hear">Hear note</button>

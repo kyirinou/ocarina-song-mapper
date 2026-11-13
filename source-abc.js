@@ -56,9 +56,15 @@ function parseSong(input){
 const source=input.trim().replace(/\\(?=\r?$)/gm,'').replace(/\\=/g,'=');
 if(!source)throw Error('Paste note names or ABC notation first.');
 if(!/^X:/m.test(source)){
-const tokens=source.toUpperCase().replace(/♯/g,'#').split(/[\s,–—-]+/).filter(Boolean);
-if(!tokens.every(token=>/^[A-G]#?[0-9]$/.test(token)))throw Error('Use note names such as A4 - D#5 - C5 - F6.');
-return {notes:tokens.map(toMidi),lengths:tokens.map(()=>4),tempo:130,intervals:[]};
+const tokens=source.toUpperCase().replace(/♯/g,'#').replace(/♭/g,'B').split(/[\s,;–—-]+/).filter(Boolean);
+const notes=tokens.map(token=>{
+const match=token.match(/^([A-G])([#B]?)([0-9])([#B]?)$/);
+if(!match||(match[2]&&match[4]))throw Error('Could not read “'+token+'”. Use note names like Bb3, C#5, or F6.');
+const [,letter,before,octave,after]=match;
+const accidental=before||after;
+return (Number(octave)+1)*12+pcs[letter]+(accidental==='#'?1:accidental==='B'?-1:0);
+});
+return {notes,lengths:notes.map(()=>4),tempo:130,intervals:[]};
 }
 const abc=source.split(/^Sequence note,/m)[0];
 const tempo=Number(abc.match(/^Q:\s*(?:1\/4\s*=\s*)?(\d+)/m)?.[1]??130);
