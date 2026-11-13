@@ -23,6 +23,7 @@ return Boolean(p&&typeof p.id==='string'&&typeof p.title==='string'&&
 Array.isArray(p.lengths)&&p.lengths.length===p.notes.length&&p.lengths.every(n=>Number.isFinite(n)&&n>0)&&
 Number.isFinite(p.tempo)&&p.tempo>=20&&p.tempo<=400&&Array.isArray(p.intervals)&&
 (p.tempoMap===undefined||(Array.isArray(p.tempoMap)&&p.tempoMap.every((mark,i)=>mark&&Number.isFinite(mark.tick)&&mark.tick>=0&&Number.isFinite(mark.bpm)&&mark.bpm>0&&(!i||mark.tick>p.tempoMap[i-1].tick))))&&
+(p.performance===undefined||(Array.isArray(p.performance)&&p.performance.length===p.notes.length&&p.performance.every(e=>e&&(e.velocity===undefined||(Number.isInteger(e.velocity)&&e.velocity>=1&&e.velocity<=127))&&(e.muted===undefined||typeof e.muted==='boolean'))))&&
 p.intervals.length<=p.notes.length&&p.intervals.every(n=>n===null||(Number.isFinite(n)&&n>0)));
 }
 };
@@ -34,6 +35,7 @@ return (count<0?'BEADGCF':'FCGDAEB').slice(0,Math.abs(count)).includes(letter)?(
 function snapshot(){
 return {id:projectId,title:projectName.value.trim()||'Untitled song',author:authorInput.value.trim(),notes:[...score.pitches],
 lengths:[...score.lengths],tempo:score.tempo,tempoMap:score.tempoMap.map(mark=>({...mark})),meter:score.meter,key:score.key,intervals:Array.from(score.intervals,n=>n??null),
+performance:score.events.map(({velocity,muted})=>({velocity,muted})),
 tabs:{layout:tabLayout.value,title:tabTitle.value,author:tabAuthor.value}};
 }
 function validProject(project){return ScoreModel.validate(project);}
@@ -61,28 +63,40 @@ try{localStorage.setItem(storageKey,JSON.stringify({projects,active:projectId}))
 catch{report('Local storage is unavailable. Export the project to save a backup.');return false;}
 }
 function refreshMenu(){
+const recent=find('recent-scores');
 projectMenu.replaceChildren();
-if(!projects.length)projectMenu.textContent='No saved scores yet.';
-for(const project of projects){
+recent.replaceChildren();
+const ordered=[...projects].reverse();
+if(!ordered.length){
+projectMenu.textContent='No saved scores yet.';
+recent.textContent='No saved scores yet.';
+}
+function scoreButton(project){
 const button=document.createElement('button');
-button.className='ctrl';
-button.textContent=project.title+(project.author?' · '+project.author:'')+' · '+project.notes.length+' notes';
+button.type='button';button.className='ctrl osm-score-row';
+const title=document.createElement('strong');title.textContent=project.title;
+const detail=document.createElement('small');
+detail.textContent=[project.author,project.notes.length+' notes'].filter(Boolean).join(' · ');
+button.append(title,detail);
 button.addEventListener('click',()=>{
 if(project.id===projectId){openPage('editor');return;}
 if(!canReplace())return;
 loadProject(project);persist();openPage('editor');
 });
-projectMenu.append(button);
+return button;
 }
+projectMenu.append(...ordered.map(scoreButton));
+recent.append(...ordered.slice(0,6).map(scoreButton));
 }
 let currentPage='home';
 function openPage(page){
 if(currentPage==='practice'&&page!==currentPage){find('practice-metronome').checked=false;stopPracticeClick();}
-if(currentPage!==page){pdfRequest++;report('');stopMic('Microphone stopped.');closeNoteMenu();}
+if(currentPage!==page){if(currentPage==='editor')rollWindow.close();if(currentPage==='practice-setup')leaveRecognition();pdfRequest++;report('');stopMic('Microphone stopped.');closeNoteMenu();}
 if(currentPage!==page&&(currentPage==='editor'||currentPage==='palette'))stopSound();
 for(const id of ['home','library','import','palette','editor','help','tuner','practice','practice-setup'])find('page-'+id).hidden=id!==page;
-find('home-nav').hidden=page==='home';
+find('home-nav').hidden=['home','practice-setup','palette','tuner'].includes(page);
 currentPage=page;
+if(page==='editor')updateWorkspace();
 if(page==='editor'||page==='palette')prepareSound()?.catch(loadError);
 window.scrollTo(0,0);
 }
@@ -97,10 +111,11 @@ function refreshSong(index=0){
 find("range-warning").hidden=score.pitches.every(Music.playable);
 renderPads();selectPosition(index);
 playBtn.disabled=!score.events.length;
-playBtn.textContent='▶ Play all '+score.events.length+' notes';
+updatePlayButton(false);
 info.textContent=score.events.length+' notes · '+score.tempo+' BPM'+(score.intervals.some(n=>n!=null)?' · Recorded timing':'');
 bar.style.width='0%';
 syncTabLayout();
+if(currentPage==='editor')updateWorkspace();
 }
 function loadProject(p){
 finishRecording();stopSound();
@@ -132,7 +147,7 @@ function newId(){return Date.now().toString(36)+'-'+Math.random().toString(36).s
 find('new').addEventListener('click',()=>{
 if(!canReplace())return;
 loadProject({id:newId(),title:'Untitled song',author:'',notes:[],lengths:[],tempo:130,intervals:[]});
-openPage('editor');projectName.focus();
+openPage('editor');
 });
 find('backup').addEventListener('click',()=>download('ocarina-project.json',JSON.stringify(snapshot(),null,2)));
 find('restore').addEventListener('change',async e=>{

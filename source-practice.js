@@ -41,8 +41,9 @@ const prefix=session.mode;
 find(prefix+'-start').disabled=false;
 find(prefix+'-stop').disabled=true;
 if(prefix==='convert')stopSoundCapture();
+if(prefix==='tuner'){showTunerPitch(null,0,0);resetTunerGraphs();}
 if(prefix==='practice')find('practice-pitch').textContent='—';
-if(prefix==='recognition')resetRecognitionFeedback();
+if(prefix==='recognition'){recognitionNeedsRelease=false;showRecognitionInput(false);}
 if(message)find(prefix+'-status').textContent=message;
 }
 async function listenMic(mode,onPitch){
@@ -52,6 +53,7 @@ const stopButton=find(mode+'-stop');
 const status=find(mode+'-status');
 const session={mode};
 micSession=session;startButton.disabled=true;stopButton.disabled=false;
+if(mode==='recognition')showRecognitionInput(true);
 status.textContent='Waiting for microphone permission…';
 try{
 if(!navigator.mediaDevices?.getUserMedia)throw Error('Microphone access is unavailable here. Open the Mac launcher in a browser that allows microphone access.');
@@ -73,6 +75,7 @@ status.textContent='Measuring room noise. Stay quiet for a moment.';
 let last=null,frames=0;
 session.timer=setInterval(()=>{
 analyser.getFloatTimeDomainData(samples);
+if(mode==='tuner')drawTunerWave(samples,session.context.sampleRate);
 if(mode==='convert'){
 inputMeter(samples);
 if(calibrationEnd&&performance.now()<calibrationEnd){
@@ -86,7 +89,9 @@ const midi=exact===null?null:Math.round(exact);
 const cents=exact===null?0:Math.round((exact-midi)*100);
 if(mode==='convert'){onPitch(midi,frequency,cents,performance.now());return;}
 if(midi!==last){last=midi;frames=0;}
-if(++frames>=2)onPitch(midi,frequency,cents);
+frames++;
+if(mode==='tuner')plotTunerPitch(frames>=2?midi:null,cents);
+if(frames>=2)onPitch(midi,frequency,cents);
 },40);
 for(const track of stream.getTracks())track.addEventListener('ended',()=>{
 if(micSession===session)stopMic('Microphone disconnected.');
@@ -100,14 +105,19 @@ function showTunerPitch(midi,frequency,cents){
 const chart=find('tuner-chart');
 if(midi!==tunerNote){
 tunerNote=midi;chart.replaceChildren();
-if(midi>=69&&midi<=89&&midi!==null)chart.append(makeFinger(midi));
+if(midi!==null&&midi>=69&&midi<=89)chart.append(makeFinger(midi));
 }
 find('tuner-pitch').textContent=midi===null?'—':name(midi);
+find('tuner-frequency').textContent=midi===null?'— Hz':frequency.toFixed(1)+' Hz';
+const needle=find('tuner-needle');
+needle.hidden=midi===null;
+needle.style.left=(50+Math.max(-50,Math.min(50,cents)))+'%';
+needle.classList.toggle('in-tune',Math.abs(cents)<=5);
 const tuning=Math.abs(cents)<=5?'In tune':Math.abs(cents)+' cents '+(cents<0?'flat':'sharp');
 find('tuner-status').textContent=midi===null?'Listening. Play a steady note.':
-frequency.toFixed(1)+' Hz · '+tuning+(midi<69||midi>89?' · Outside the 12-hole C fingering range':'');
+tuning+(midi<69||midi>89?' · Outside the 12-hole C fingering range':'');
 }
-find('tuner-start').addEventListener('click',()=>{showTunerPitch(null,0,0);listenMic('tuner',showTunerPitch);});
+find('tuner-start').addEventListener('click',()=>{resetTunerGraphs();showTunerPitch(null,0,0);listenMic('tuner',showTunerPitch);});
 find('tuner-stop').addEventListener('click',()=>{showTunerPitch(null,0,0);stopMic('Microphone stopped.');});
 function showPracticeFingering(){
 const chart=find('practice-chart');
@@ -360,61 +370,3 @@ draftChanged=true;openPage('editor');report('Imported '+take.notes.length+' note
 });
 
 
-const recognitionPitches=Array.from({length:21},(_,i)=>69+i);
-let recognitionPool=new Set(recognitionPitches);
-let recognitionPitch=null,recognitionTimer=null,recognitionNeedsRelease=false;
-const recognitionTarget=find('recognition-target');
-const recognitionButtons=new Map();
-function resetRecognitionFeedback(){
-clearTimeout(recognitionTimer);
-recognitionTimer=null;
-recognitionNeedsRelease=false;
-recognitionTarget.classList.remove('recognition-hit');
-}
-function nextRecognitionPitch(){
-const pitches=[...recognitionPool];
-const choices=pitches.length>1?pitches.filter(pitch=>pitch!==recognitionPitch):pitches;
-recognitionPitch=choices.length?choices[Math.floor(Math.random()*choices.length)]:null;
-recognitionTarget.textContent=recognitionPitch===null?'—':name(recognitionPitch);
-}
-function updateRecognitionPool(){
-resetRecognitionFeedback();
-for(const [pitch,button] of recognitionButtons)button.setAttribute('aria-pressed',String(recognitionPool.has(pitch)));
-if(!recognitionPool.size&&micSession?.mode==='recognition')stopMic();
-find('recognition-start').disabled=!recognitionPool.size||micSession?.mode==='recognition';
-find('recognition-status').textContent=!recognitionPool.size?'Choose at least one pitch.':
-micSession?.mode==='recognition'?'Play the displayed pitch.':'Start the microphone and play the displayed pitch.';
-nextRecognitionPitch();
-}
-for(const pitch of recognitionPitches){
-const button=document.createElement('button');
-button.type='button';button.className='ctrl';button.textContent=name(pitch);
-function togglePitch(){
-if(recognitionPool.has(pitch))recognitionPool.delete(pitch);else recognitionPool.add(pitch);
-updateRecognitionPool();
-}
-button.onclick=togglePitch;
-button.oncontextmenu=event=>{event.preventDefault();togglePitch();};
-recognitionButtons.set(pitch,button);
-find('recognition-pool').append(button);
-}
-find('recognition-all').onclick=()=>{recognitionPool=new Set(recognitionPitches);updateRecognitionPool();};
-find('recognition-clear').onclick=()=>{recognitionPool.clear();updateRecognitionPool();};
-find('recognition-stop').onclick=()=>stopMic('Paused. Start the microphone to resume.');
-find('recognition-start').onclick=()=>listenMic('recognition',(midi,frequency,cents)=>{
-if(recognitionNeedsRelease){
-if(midi!==recognitionPitch)recognitionNeedsRelease=false;
-return;
-}
-if(recognitionTimer!==null||midi!==recognitionPitch||Math.abs(cents)>45)return;
-recognitionTarget.classList.add('recognition-hit');
-find('recognition-status').textContent='Correct!';
-recognitionTimer=setTimeout(()=>{
-recognitionTimer=null;
-recognitionTarget.classList.remove('recognition-hit');
-recognitionNeedsRelease=recognitionPool.size===1;
-nextRecognitionPitch();
-find('recognition-status').textContent=recognitionNeedsRelease?'Release the note, then play it again.':'Play the displayed pitch.';
-},650);
-});
-updateRecognitionPool();

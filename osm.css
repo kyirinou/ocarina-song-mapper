@@ -14,7 +14,7 @@ h1{font-size:1.5rem}
 #oc93 .note .num{font-size:10px;color:var(--viz-muted)}
 #oc93 .note .letter{font-size:15px;font-weight:750}
 #oc93 .note .pitch{font-size:11px;color:var(--viz-muted)}
-#oc93 .note.active{background:var(--viz-accent-bg);border-color:var(--viz-accent);box-shadow:inset 0 0 0 1px var(--viz-accent)}
+#oc93 .note.active{outline:2px solid #1454b5;outline-offset:-2px}
 #oc93 .note.selected{outline:2px solid var(--viz-accent);outline-offset:-4px}
 #oc93 .note.new{border-style:dashed;border-color:var(--viz-accent)}
 #oc93 input{width:100%;accent-color:var(--viz-accent)}
@@ -117,4 +117,4 @@ body:has(#oc93-page-home:not([hidden]))>h1{text-align:center;font-size:clamp(2.5
 #oc93 [data-practice-mode="recognition"]{grid-column:1/-1;text-align:center}
 #oc93 #oc93-recognition-target{display:block;text-align:center;font-size:clamp(2.75rem,9vw,5rem);font-weight:700;padding:.2em;border-radius:.2em}
 #oc93 #oc93-recognition-target.recognition-hit{background:#dcf4e3;color:#195d34}
-#oc93 #oc93-recognition-pool [aria-pressed="true"]{background:var(--viz-accent);color:white}
+

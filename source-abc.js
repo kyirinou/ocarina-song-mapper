@@ -100,7 +100,7 @@ if(recording){report('Finish recording before opening the score.');return;}
 bpmInput.value=score.tempo;
 take=score.pitches.map((m,index)=>({index,pitch:pitchText(m),time:null,interval:null,beats:score.events[index].ticks/4}));
 find('apply-raw').disabled=true;find('quantize').disabled=true;find('score').hidden=false;renderTiming();
-if(scroll)find('score').scrollIntoView({block:'start'});
+if(scroll){timingPanel.open=true;switchEditorView('staff');}
 }
 find('view').addEventListener('click',()=>showScore());
 function applyTake(raw){

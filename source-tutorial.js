@@ -26,7 +26,7 @@ const tutorialSteps=[
   "tuner",
   "#oc93-tuner-start",
   "Tune a real ocarina",
-  "Start the microphone and play a steady note. The tuner shows pitch, frequency, sharp or flat feedback, and the corresponding Alto C fingering."
+  "Start the microphone to see the pitch, frequency, cents from center, and Alto C fingering. Pitch history shows vibrato over four seconds. Input waveform shows the microphone signal."
  ],
  [
   "Import and capture",
@@ -82,7 +82,14 @@ const tutorialSteps=[
   "import",
   "#oc93-restore",
   "Restore a project backup",
-  "Import an exported JSON project to restore its score and settings. Saved scores are stored in this browser and listed under View existing scores."
+  "Import an exported JSON project to restore its score and settings. Saved scores are stored in this browser and listed under Recent scores on the main menu."
+ ],
+ [
+  "Score editing",
+  "editor",
+  ".osm-menubar",
+  "Use the editor menus",
+  "File opens imports and exports. Edit has note actions. View switches between the staff and note sequence. Window shows or hides the editing panels. Help opens this tutorial."
  ],
  [
   "Score editing",
@@ -129,9 +136,16 @@ const tutorialSteps=[
  [
   "Score editing",
   "editor",
-  "#oc93-timeline",
+  ".osm-menubar",
   "Edit in the piano roll",
-  "Select a note in the timeline. Drag its right edge to resize its written duration. The Beats field is a keyboard-friendly alternative."
+  "Open Window → Piano roll. Double-click empty space to add a note. Drag notes to move them or drag their right edge to resize. Shift-click selects a range. Command-click or Ctrl-click toggles individual notes."
+ ],
+ [
+  "Score editing",
+  "editor",
+  "#oc93-piano-roll",
+  "Set up the piano roll",
+  "Drag the title bar to move the window or drag an edge or corner to resize it. Piano roll settings controls labels, snap, zoom, swing, humanize, and playback follow."
  ],
  [
   "Score editing",
@@ -150,9 +164,9 @@ const tutorialSteps=[
  [
   "Notation and playback",
   "editor",
-  "#oc93-view",
+  ".osm-viewbar",
   "Read and edit the staff",
-  "Open notation and click a note to focus its pitch control. The timing table lets you edit written beats and apply them to playback. Long pitches can be tied across barlines."
+  "Use Staff to read notation and click a note to select it. Open Rhythm and timing to edit written durations or work with a recording. The timing table lets you edit written beats and apply them to playback. Long pitches can be tied across barlines."
  ],
  [
   "Notation and playback",
@@ -187,7 +201,7 @@ const tutorialSteps=[
   "practice-setup",
   "#oc93-practice-recognition",
   "Note recognition",
-  "Start the microphone and play the pitch shown by name. A match flashes green before the next prompt. Open Choose pitches and click or right-click to build a custom drill."
+  "Free mode opens with a blank fingering chart. Tap holes and submit, or choose Use microphone to answer by playing. Manual input returns to the chart. Use the speaker to hear the target and Choose pitches to set your pool. In Flashcards, rate your recall to schedule your next FSRS review."
  ],
  [
   "Practice",
@@ -259,6 +273,12 @@ const [topic,page,selector,heading,description]=tutorialSteps[tutorialIndex];
 tutorialTopic.value=topic;
 if(page==='practice'&&currentPage!=='practice')showPractice([72,74,76,77,79,77,76,74,72],'help');
 else openPage(page);
+if(selector==='#oc93-piano-roll')openPianoRoll();
+else if(tutorialTarget===rollWindow)rollWindow.close();
+if(page==='editor'){
+if(selector==='#oc93-sequence')switchEditorView('sequence');
+if(selector==='#oc93-view'||selector==='.osm-viewbar')switchEditorView('staff');
+}
 if(page==='practice-setup')choosePractice(selector==='#oc93-practice-recognition'?'recognition':null);
 const exportModes={'#oc93-music-panel':'music','#oc93-tabs-panel':'tabs','#oc93-backup':'backup'};
 if(exportModes[selector]){
@@ -313,7 +333,8 @@ composeKeys.append(button);
 }
 let practiceMode=null;
 function choosePractice(mode){
-if(practiceMode==='recognition'&&mode!=='recognition'&&micSession?.mode==='recognition')stopMic('Microphone stopped.');
+if(practiceMode==='recognition'&&mode!=='recognition')leaveRecognition();
+if(mode==='recognition')setRecognitionMode(false);
 if(mode===null){
 const list=find('practice-history');list.replaceChildren();
 let history=[];try{history=JSON.parse(localStorage.getItem('osm-practice-history')||'[]');}catch{}

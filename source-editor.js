@@ -1,7 +1,7 @@
 const historyPast=[], historyFuture=[];
 let lastScore;
 function captureEdit(){
-  return {notes:[...score.pitches],lengths:[...score.lengths],intervals:[...score.intervals],tempo:score.tempo,tempoMap:score.tempoMap.map(mark=>({...mark})),meter:score.meter,key:score.key,position};
+  return {notes:[...score.pitches],lengths:[...score.lengths],intervals:[...score.intervals],performance:score.events.map(({velocity,muted})=>({velocity,muted})),tempo:score.tempo,tempoMap:score.tempoMap.map(mark=>({...mark})),meter:score.meter,key:score.key,position};
 }
 function updateHistoryButtons(){
   find('undo').disabled=!historyPast.length;
@@ -82,38 +82,6 @@ find('tempo-set').onclick=()=>{
   if(bpm<20||bpm>400||!Number.isFinite(bpm)){report('Enter a tempo from 20 to 400 BPM.');return;}
   score.tempo=bpm;score.tempoMap=[];score.events.forEach(event=>{event.ms=null;});edited(position);
 };
-function drawTimeline(){
-  const host=find('timeline');host.replaceChildren();
-  const total=score.lengths.reduce((sum,n)=>sum+n,0);
-  if(!total)return;
-  const grid=document.createElement('div');grid.className='osm-roll';
-  grid.style.width=Math.max(300,total*9)+'px';
-  let tick=0;
-  score.pitches.forEach((m,i)=>{
-    const card=document.createElement('button');card.className='ctrl';
-    card.style.left=tick*9+'px';card.style.top=(m===null?21:Math.min(21,Math.max(0,89-m)))*18+'px';
-    card.style.width=Math.max(16,score.events[i].ticks*9)+'px';
-    card.textContent=m===null?'Rest':name(m);card.title='Note '+(i+1)+' · '+card.textContent;
-    card.onclick=()=>{selectPosition(i);showPlaybackFingering(i);if(m!==null)previewPitch(m);};
-const grip=document.createElement('span');grip.className='osm-roll-grip';grip.title='Drag to change duration';
-grip.addEventListener('pointerdown',event=>{
-if(event.button!==0||recording)return;
-event.preventDefault();event.stopPropagation();grip.setPointerCapture(event.pointerId);
-const start=event.clientX, original=score.events[i].ticks;
-const length=e=>Math.max(1,Math.round(original+(e.clientX-start)/9));
-grip.onpointermove=e=>{card.style.width=Math.max(22,length(e)*9)+'px';};
-grip.onpointerup=e=>{
-const ticks=length(e);
-if(ticks===original){drawTimeline();return;}
-score.events[i].ticks=ticks;score.events[i].ms=null;edited(i);
-};
-grip.onpointercancel=drawTimeline;
-});
-card.append(grip);
-    grid.append(card);tick+=score.events[i].ticks;
-  });
-  host.append(grid);
-}
 document.addEventListener('keydown',event=>{
   if(currentPage!=='editor'||editable(event.target)||swapDialog.open||tutorial.open||!(event.metaKey||event.ctrlKey)||event.altKey)return;
   if(event.key.toLowerCase()==='z'){event.preventDefault();(event.shiftKey?find('redo'):find('undo')).click();}

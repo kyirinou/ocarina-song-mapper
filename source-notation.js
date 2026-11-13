@@ -27,9 +27,11 @@ return entries.slice(index,index+3).length===3&&entries.slice(index,index+3).eve
 let renderedScore='', scoreGroups=new Map();
 function highlightScore(index){
 if(scorePlaybackIndex===index)return;
-for(const glyph of scoreGroups.get(scorePlaybackIndex)??[])glyph.classList.remove('playing-note');
+const previous=scorePlaybackIndex;
+for(const glyph of scoreGroups.get(previous)??[])glyph.classList.remove('playing-note');
 scorePlaybackIndex=index;
-if(!find('score').hidden&&take.length)drawStaff();
+if(editorView==='staff'&&(previous<0||index<0))drawStaff();
+for(const glyph of scoreGroups.get(index)??[])glyph.classList.add('playing-note');
 
 }
 function engravedScore(entries,bpm=scorePlaybackIndex<0?tempo():score.tempo){
@@ -71,7 +73,7 @@ if(remaining>1e-7)line+=pitch==='z'?' ':'-';
 if(Math.abs(tick-measureTicks)<1e-7){
 line+=' | ';tick=0;accidentals.clear();measure++;
 if(measure%3===0){lines.push(line);line='';}
-}else if(tick%4===0||length>=4){line+=' ';}
+}else if(tick%4===0||length>=4||(!tripletLeft&&!Number.isInteger(length))){line+=' ';}
 }
 }
 if(line.trim())lines.push(line.trimEnd());
@@ -81,10 +83,12 @@ for(const row of lines){offsets.push(cursor);cursor+=row.length+1;}
 return {abc:header.concat(lines).join('\n'),glyphIndexes,engravedEvents:new Map(tokens.map(t=>[offsets[t.line]+t.offset,t.index]))};
 }
 function drawStaff(){
-if(!window.ABCJS){loadNotation().then(()=>{if(!find('score').hidden)drawStaff();}).catch(loadError);return;}
 const staff=find('staff');
-const entries=scorePlaybackIndex<0?take:score.pitches.map((m,index)=>({index,pitch:pitchText(m),beats:score.events[index].ticks/4}));
-const {abc,glyphIndexes,engravedEvents}=engravedScore(entries);
+if(!score.events.length){staff.replaceChildren();scoreGroups.clear();return;}
+if(!window.ABCJS){loadNotation().then(()=>{if(currentPage==='editor'&&editorView==='staff')drawStaff();}).catch(loadError);return;}
+const showTake=scorePlaybackIndex<0&&timingPanel.open&&!find('score').hidden&&take.length;
+const entries=showTake?take:scoreEntries();
+const {abc,glyphIndexes,engravedEvents}=engravedScore(entries,showTake?tempo():score.tempo);
 const renderKey=abc+'\n'+glyphIndexes.join(',');
 if(renderKey!==renderedScore||!staff.firstChild){
 window.ABCJS.renderAbc(staff,abc,{responsive:'resize',add_classes:true,staffwidth:720,oneSvgPerLine:true,clickListener:element=>{
@@ -104,6 +108,7 @@ scoreGroups.get(index).push(glyph);
 });
 }
 for(const glyph of scoreGroups.get(scorePlaybackIndex)??[])glyph.classList.add('playing-note');
+highlightWorkspace();
 }
 function updateNotation(){
 if(!take.length)return;

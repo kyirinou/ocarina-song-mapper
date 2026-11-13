@@ -46,3 +46,26 @@ next();
 find('sound-done').addEventListener('click',()=>soundSettings.close());
 soundSettings.addEventListener('close',stopSoundSample);
 
+
+for(const [id,attribute] of [['theme','theme'],['interface-font','font']]){
+  const field=find(id),key='osm-'+attribute;
+  try{
+    const saved=localStorage.getItem(key);
+    if([...field.options].some(option=>option.value===saved))field.value=saved;
+  }catch{}
+  document.documentElement.dataset[attribute]=field.value;
+  field.addEventListener('change',()=>{
+    document.documentElement.dataset[attribute]=field.value;
+    try{localStorage.setItem(key,field.value);}catch{}
+  });
+}
+
+const settingsTabs=[...soundSettings.querySelectorAll('[data-settings-panel]')];
+for(const tab of settingsTabs)tab.onclick=()=>{
+  for(const entry of settingsTabs){
+    const active=entry===tab;
+    entry.setAttribute('aria-pressed',String(active));
+    find('settings-'+entry.dataset.settingsPanel).hidden=!active;
+  }
+  if(tab.dataset.settingsPanel!=='audio')stopSoundSample();
+};
