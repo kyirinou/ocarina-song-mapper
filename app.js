@@ -53,22 +53,40 @@ e.preventDefault();
 const rect=b.getBoundingClientRect();
 openNoteMenu(i,e.clientX||rect.left,e.clientY||rect.bottom);
 });
-b.addEventListener('click',e=>{if(e.detail===0){selectPosition(i);showPlaybackFingering(i);stopStep();start('step',i);stepTimer=setTimeout(stopStep,320)}});
-b.addEventListener('pointerdown',e=>{if(e.button!==0)return;e.preventDefault();selectPosition(i);showPlaybackFingering(i);b.focus({preventScroll:true});b.setPointerCapture(e.pointerId);start('pointer-'+i,i)});
+b.addEventListener('click',e=>{if(e.detail===0){selectPosition(i,e);showPlaybackFingering(i);stopStep();start('step',i);stepTimer=setTimeout(stopStep,320)}});
+b.addEventListener('pointerdown',e=>{if(e.button!==0)return;e.preventDefault();selectPosition(i,e);showPlaybackFingering(i);b.focus({preventScroll:true});b.setPointerCapture(e.pointerId);start('pointer-'+i,i)});
 b.addEventListener('pointerup',()=>end('pointer-'+i));b.addEventListener('pointercancel',()=>end('pointer-'+i));b.addEventListener('lostpointercapture',()=>end('pointer-'+i));
 }
 }
 const positionLabel=root.querySelector('#oc93-position');
 let position=0, playedSelection=false;
-function selectPosition(index){
+let selectedNotes=new Set(), selectionAnchor=0;
+function selectPosition(index,event){
 playedSelection=false;
-pads[position]?.classList.remove('selected');
-pads[position]?.removeAttribute('aria-current');
-position=Math.max(0,Math.min(score.events.length-1,index));
-if(!score.events.length){positionLabel.textContent='No notes yet';syncEdit();return;}
-pads[position].classList.add('selected');
-pads[position].setAttribute('aria-current','true');
-positionLabel.textContent='Selected · Note '+(position+1)+' of '+score.events.length+' · '+name(score.events[position].pitch);
+const next=Math.max(0,Math.min(score.events.length-1,index));
+if(!score.events.length){selectedNotes.clear();selectionAnchor=position=0;}
+else if(event?.shiftKey){
+selectedNotes=new Set();
+for(let i=Math.min(selectionAnchor,next);i<=Math.max(selectionAnchor,next);i++)selectedNotes.add(i);
+position=next;
+}else if(event?.metaKey||event?.ctrlKey){
+if(selectedNotes.has(next)){
+if(selectedNotes.size>1)selectedNotes.delete(next);
+}else selectedNotes.add(next);
+position=selectedNotes.has(next)?next:[...selectedNotes].at(-1);
+selectionAnchor=position;
+}else{
+selectionAnchor=position=next;selectedNotes=new Set([next]);
+}
+renderNoteSelection();
+}
+function renderNoteSelection(){
+pads.forEach((pad,i)=>{
+pad.classList.toggle('selected',selectedNotes.has(i));
+pad.setAttribute('aria-pressed',String(selectedNotes.has(i)));
+if(i===position)pad.setAttribute('aria-current','true');else pad.removeAttribute('aria-current');
+});
+positionLabel.textContent=!pads.length?'No notes yet':selectedNotes.size>1?selectedNotes.size+' notes selected':'Selected · Note '+(position+1)+' of '+score.events.length+' · '+name(score.events[position].pitch);
 syncEdit();
 }
 const display=root.querySelector('#oc93-now'),info=root.querySelector('#oc93-info'),bar=root.querySelector('#oc93-progress'),playBtn=root.querySelector('#oc93-play'),speed=root.querySelector('#oc93-speed');
@@ -582,7 +600,7 @@ if(canReplace()){loadProject({...project,id:newId()});draftChanged=true;openPage
 });
 function syncEdit(){
 const hasNote=score.events.length>0;
-find('pitch-shifts').hidden=!hasNote||score.events[position].pitch===null;
+find('pitch-shifts').hidden=![...selectedNotes].some(i=>score.events[i]?.pitch!=null);
 pitchEditor.disabled=!hasNote;beatsEditor.disabled=!hasNote;
 pitchEditor.querySelector('[data-outside]')?.remove();
 if(hasNote&&!Music.playable(score.events[position].pitch)){
@@ -2129,10 +2147,16 @@ find('merge').onclick=()=>{
   score.splice(position+1,1);score.events[position].ms=null;edited(position,true);
 };
 function shiftSelectedOctave(steps){
-if(recording||!score.events.length||score.events[position].pitch===null)return;
-const pitch=score.events[position].pitch+steps;
-if(!Music.validPitch(pitch)){report("That shift exceeds the supported pitch range.");return;}
-score.events[position].pitch=pitch;edited(position);previewPitch(pitch);
+if(recording)return;
+const selection=new Set(selectedNotes),anchor=selectionAnchor;
+const shifted=[...selection].filter(i=>score.events[i].pitch!==null)
+  .map(i=>[i,score.events[i].pitch+steps]);
+if(!shifted.length)return;
+if(!shifted.every(([,pitch])=>Music.validPitch(pitch))){report("That shift exceeds the supported pitch range.");return;}
+shifted.forEach(([i,pitch])=>{score.events[i].pitch=pitch;});
+edited(position);
+selectedNotes=selection;selectionAnchor=anchor;renderNoteSelection();
+previewPitch((shifted.find(([i])=>i===position)??shifted[0])[1]);
 }
 find('semitone-up').onclick=()=>shiftSelectedOctave(1);
 find('semitone-down').onclick=()=>shiftSelectedOctave(-1);

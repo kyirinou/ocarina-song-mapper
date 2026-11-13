@@ -49,10 +49,16 @@ find('merge').onclick=()=>{
   score.splice(position+1,1);score.events[position].ms=null;edited(position,true);
 };
 function shiftSelectedOctave(steps){
-if(recording||!score.events.length||score.events[position].pitch===null)return;
-const pitch=score.events[position].pitch+steps;
-if(!Music.validPitch(pitch)){report("That shift exceeds the supported pitch range.");return;}
-score.events[position].pitch=pitch;edited(position);previewPitch(pitch);
+if(recording)return;
+const selection=new Set(selectedNotes),anchor=selectionAnchor;
+const shifted=[...selection].filter(i=>score.events[i].pitch!==null)
+  .map(i=>[i,score.events[i].pitch+steps]);
+if(!shifted.length)return;
+if(!shifted.every(([,pitch])=>Music.validPitch(pitch))){report("That shift exceeds the supported pitch range.");return;}
+shifted.forEach(([i,pitch])=>{score.events[i].pitch=pitch;});
+edited(position);
+selectedNotes=selection;selectionAnchor=anchor;renderNoteSelection();
+previewPitch((shifted.find(([i])=>i===position)??shifted[0])[1]);
 }
 find('semitone-up').onclick=()=>shiftSelectedOctave(1);
 find('semitone-down').onclick=()=>shiftSelectedOctave(-1);
