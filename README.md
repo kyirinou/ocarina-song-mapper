@@ -6,11 +6,20 @@ Ocarina Song Mapper is a browser-based tool for learning, transcribing, editing,
 
 ## Features!! (Including but not limited to)
 
+- **Build and edit scores.**
+  Start with a blank score, paste note names such as `A4 - D#5 - C5 - F6`, or import supported ABC, MIDI, or MusicXML. Click a fingering card to hear it. Edit pitches and durations, insert or reorder notes, or audition replacements with **Swap note**.
+
+- **Select and shift multiple notes.**
+  Shift-click to select a range. Command-click on Mac or Ctrl-click on Windows to toggle individual notes. Use the semitone and octave buttons to shift selected pitches together. Imported pitches outside A4–F6 appear in yellow so you can bring them into range.
+
 - **Convert ocarina sound into a score**
   Play a melody one note at a time into your microphone. Review the detected pitches, then add them to the editor with their captured timing. Leave a short break between repeated pitches and correct any misheard notes in the editor.
 
 - **Play Along with your ocarina.**
-  Follow the fingering cards at your own pace. A blue outline marks the next fingering and the card turns green when you play the matching pitch.
+  Follow the fingering cards at your own pace. A blue outline marks the next fingering and the card turns green when you play the matching pitch. Open **Practice** to work through a full song or loop a selected section without saving a score.
+
+- **Practice note recognition.**
+  Play the pitch shown by name into your microphone. A correct match flashes green before the next prompt. Choose any pitches from A4 to F6 for a custom drill.
 
 - **Tune your ocarina.** Play a steady note to see its pitch, frequency, how sharp or flat it is, and the matching fingering when it falls within the instrument’s range.
 
@@ -20,10 +29,10 @@ Ocarina Song Mapper is a browser-based tool for learning, transcribing, editing,
 Press Enter to step through a score, or use **Play all** to hear the full rhythm while the notation highlights in sync. Change the playback speed or loop a song. Record the intervals between Enter taps and apply either the exact timing or the edited notation durations.
 
 - **Export music and fingering tabs**
-Download the engraved music score as PDF or editable ABC. Customize the tab title, credit, spacing, and line breaks. Export a fingering PDF with the written rhythm under each diagram, or copy tab codes into [Ocarina Tabs Creator](https://panzi.github.io/ocarina_tabs/).
+Download the engraved music score as PDF, ABC, or MusicXML. Supported triplets and tempo changes carry through ABC and MusicXML. Customize the tab title, credit, spacing, and line breaks. Export a fingering PDF with the written rhythm under each diagram, or copy tab codes into [Ocarina Tabs Creator](https://panzi.github.io/ocarina_tabs/).
 
 - **Explore the instrument.**
-The **Playable notes** page has all 21 pitches from A4 to F6 with keyboard shortcuts and fingering diagrams. **Help** includes a guided visual tutorial.
+The **Playable notes** page has all 21 pitches from A4 to F6 with keyboard shortcuts and fingering diagrams. Use **Ocarina Sounds** to choose oc1, oc2, or oc3 for playback and previews. **Help** includes a guided visual tutorial.
 
 ## Get started
 

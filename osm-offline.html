@@ -381,6 +381,11 @@ body:has(#oc93-page-home:not([hidden]))>h1{text-align:center;font-size:clamp(2.5
 #oc93 .editor-meta input{width:100%;box-sizing:border-box}
 
 #oc93 .note.outside-range{background:#fff1ae;border-color:#a47713;color:#382900}
+
+#oc93 [data-practice-mode="recognition"]{grid-column:1/-1;text-align:center}
+#oc93 #oc93-recognition-target{display:block;text-align:center;font-size:clamp(2.75rem,9vw,5rem);font-weight:700;padding:.2em;border-radius:.2em}
+#oc93 #oc93-recognition-target.recognition-hit{background:#dcf4e3;color:#195d34}
+#oc93 #oc93-recognition-pool [aria-pressed="true"]{background:var(--viz-accent);color:white}
 </style>
 </head>
 <body>
@@ -468,6 +473,7 @@ body:has(#oc93-page-home:not([hidden]))>h1{text-align:center;font-size:clamp(2.5
 <button class="ctrl" data-practice-mode="paste">Play pasted notes</button>
 <button class="ctrl" data-practice-mode="tabs">Play uploaded ocarina tabs</button>
 <button class="ctrl" data-practice-mode="backup">Play project backup</button>
+<button class="ctrl" data-practice-mode="recognition">Note recognition</button>
 </div></div>
 <div id="oc93-practice-paste" class="osm-panel" hidden>
 <label>Notes or ABC notation<textarea id="oc93-practice-input" rows="5" placeholder="A4 - C5 - F6"></textarea></label>
@@ -480,6 +486,17 @@ body:has(#oc93-page-home:not([hidden]))>h1{text-align:center;font-size:clamp(2.5
 </div>
 <div id="oc93-practice-backup" class="osm-panel" hidden>
 <label>Upload project backup <input id="oc93-practice-file" type="file" accept=".json"></label>
+</div>
+<div id="oc93-practice-recognition" class="osm-panel" hidden>
+<h3>Note recognition</h3>
+<output id="oc93-recognition-target" aria-live="polite" aria-label="Target pitch">—</output>
+<div class="toolbar"><button class="ctrl primary" id="oc93-recognition-start">Start microphone</button><button class="ctrl" id="oc93-recognition-stop" disabled>Pause</button></div>
+<p id="oc93-recognition-status" role="status">Start the microphone and play the displayed pitch.</p>
+<details><summary>Choose pitches</summary>
+<p>Click or right-click a pitch to toggle it.</p>
+<div class="toolbar"><button class="ctrl" id="oc93-recognition-all">Select all</button><button class="ctrl" id="oc93-recognition-clear">Clear selection</button></div>
+<div class="toolbar" id="oc93-recognition-pool" aria-label="Practice pitches"></div>
+</details>
 </div>
 </section>
 <section id="oc93-page-practice" hidden>
@@ -508,7 +525,7 @@ body:has(#oc93-page-home:not([hidden]))>h1{text-align:center;font-size:clamp(2.5
 <section id="oc93-page-help" hidden>
 <h2>Help</h2>
 <button class="ctrl primary" id="oc93-tutorial">Start visual tutorial</button>
-<div class="help-list"><details class="osm-help-card"><summary>Home and sounds</summary><button type="button" class="ctrl" data-tour-topic="Home and sounds">Show in tutorial</button><h3>Find your way around</h3><p>OSM groups composing, importing, saved scores, playable notes, practice, and tuning on the home screen. The lower-right link opens kiri’s GitHub profile.</p><h3>Choose an ocarina sound</h3><p>Open the gear and choose oc1, oc2, or oc3. Hear sample plays Ode to Joy. The browser remembers your choice for score playback and note previews.</p><h3>Hear and see fingerings</h3><p>Click a pitch or press its displayed letter. The centered chart shows the matching fingering and pitch.</p><h3>Tune a real ocarina</h3><p>Start the microphone and play a steady note. The tuner shows pitch, frequency, sharp or flat feedback, and the corresponding Alto C fingering.</p></details><details class="osm-help-card"><summary>Import and capture</summary><button type="button" class="ctrl" data-tour-topic="Import and capture">Show in tutorial</button><h3>Paste notes or ABC</h3><p>Paste note names or single-voice ABC. Supported ABC can include key signatures, accidentals, rests, ties, tuplets, and inline tempo changes.</p><h3>Read a fingering image</h3><p>Upload clear PNG or JPG fingering diagrams or a PDF. OSM reads numbered PDF labels when present and otherwise tries scanning the diagrams. Correct detected pitches in the review dialog before continuing. Image imports start with one beat per event.</p><h3>Import a MIDI melody</h3><p>Choose a monophonic track. Written durations and rests are retained, and tempo changes are used in playback and notation. If possible, OSM offers to transpose an out-of-range melody.</p><h3>Import MusicXML</h3><p>Import a single partwise melody. OSM reads pitch, key, meter, rests, forward gaps, ties, tuplet durations, and tempo directions. Multipart scores, chords, grace notes, and multiple simultaneous voices need preparation elsewhere.</p><h3>Transcribe a recording</h3><p>Select a solo WAV or MP3. Review the resulting pitches and estimated tempo before opening the take as a score.</p><h3>Record with the microphone</h3><p>Optionally measure room noise, then play one note at a time. The waveform and input meter show what the microphone receives. Leave a clear gap between repeated pitches.</p><h3>Review a detected melody</h3><p>Stop capture to see pitch choices, uncertain notes, durations, and the estimated tempo. Correct pitches and adjust the tempo before opening the take. Detected pauses can become rests.</p><h3>Restore a project backup</h3><p>Import an exported JSON project to restore its score and settings. Saved scores are stored in this browser and listed under View existing scores.</p></details><details class="osm-help-card"><summary>Score editing</summary><button type="button" class="ctrl" data-tour-topic="Score editing">Show in tutorial</button><h3>Compose a score</h3><p>Make new score opens a blank editor. Choose a playable pitch to hear it and insert it after the current selection.</p><h3>Name and save a score</h3><p>Enter a title and optional source or author. Save score stores the project in this browser. Use a project backup for another device or browser.</p><h3>Edit the sequence</h3><p>Click a card to select and hear it. Arrow keys move the selection. Delete removes it. Right-click to hear, insert, move, remove, or audition a replacement with Swap note.</p><h3>Change pitch or duration</h3><p>Use the selected-note controls to edit pitch and beats. The fingering, playback, staff, and exports share the same score events.</p><h3>Insert, split, and merge</h3><p>Insert a rest for silence. Split divides a duration. Merge combines adjacent events of the same pitch. Copy event and Paste event reuse a pitch and duration.</p><h3>Undo and redo</h3><p>Use Undo and Redo for note and notation changes in the current editing session. Command-Z or Control-Z undoes an edit. Add Shift to redo.</p><h3>Edit in the piano roll</h3><p>Select a note in the timeline. Drag its right edge to resize its written duration. The Beats field is a keyboard-friendly alternative.</p><h3>Fit the instrument range</h3><p>Shift the whole melody by semitones or shift one selected note by an octave. OSM checks the 12-hole Alto C range, A4 through F6.</p></details><details class="osm-help-card"><summary>Notation and playback</summary><button type="button" class="ctrl" data-tour-topic="Notation and playback">Show in tutorial</button><h3>Set meter, key, and tempo</h3><p>Choose a time signature, major key signature, and base tempo. A key signature changes how accidentals are written while preserving pitches. Applying a new global tempo replaces the imported tempo map and exact timing.</p><h3>Read and edit the staff</h3><p>Open notation and click a note to focus its pitch control. The timing table lets you edit written beats and apply them to playback. Long pitches can be tied across barlines.</p><h3>Read triplets and tempo changes</h3><p>Eligible equal-duration 3:2 triplets show a triplet marking. Imported tempo changes appear in the staff and carry through ABC and MusicXML exports.</p><h3>Play a score</h3><p>Play all follows the rhythm and updates the large fingering and staff highlights without scrolling the page. Use Stop, Loop, or Playback speed. Press Enter to step through notes manually.</p><h3>Tap in a rhythm</h3><p>Select a starting note, start Record Enter timing, and tap Enter in rhythm. Finish recording, then apply exact intervals or quantized written durations.</p></details><details class="osm-help-card"><summary>Practice</summary><button type="button" class="ctrl" data-tour-topic="Practice">Show in tutorial</button><h3>Practice without saving</h3><p>Choose pasted notes or ABC, uploaded fingering tabs, or a JSON project backup. Play Along is also available directly from the Score Editor.</p><h3>Follow the fingering</h3><p>The large diagram shows the next fingering. With the microphone running, the corner shows the detected pitch. A blue outline marks the target, and a correct match turns the card green.</p><h3>Advance and restart</h3><p>Play a matching note or press Enter to advance manually. Pause stops listening. Restart clears progress in the current range. The arrow below the cards expands the default eight-note view.</p><h3>Work on a specific part</h3><p>Choose the first and last notes in the range picker. Practice selected notes uses only that range. Loop section repeats it, and Practice full sequence restores the song.</p><h3>Practice with a beat</h3><p>Set the practice BPM and enable the metronome for a reference click. Timed practice gives a visual four-beat count-in, then reports early or late matches. The input offset is a manual adjustment.</p><h3>Review feedback</h3><p>Play Along tracks matched notes and reports expected versus heard pitch. Completed microphone sessions appear in Recent practice. Pitch accuracy measures detected attempts, including wrong notes.</p></details><details class="osm-help-card"><summary>Export</summary><button type="button" class="ctrl" data-tour-topic="Export">Show in tutorial</button><h3>Export sheet music</h3><p>Choose Music score for ABC, MusicXML, or an engraved PDF. ABC and MusicXML retain supported triplets and tempo marks. Copy for chat includes notation and available measured timing.</p><h3>Export fingering tabs</h3><p>Choose Ocarina tabs. Edit the title, credit, spaces, and line breaks. Preview the fingerings and rhythm, then download PDF, SVG, or PNG, or copy codes for Ocarina Tabs Creator.</p><h3>Keep a project backup</h3><p>Choose Project backup and download JSON. Reimport it to edit the project or open it in Practice. The separate installable preview package supports offline use after a first online visit in a compatible browser.</p></details></div>
+<div class="help-list"><details class="osm-help-card"><summary>Home and sounds</summary><button type="button" class="ctrl" data-tour-topic="Home and sounds">Show in tutorial</button><h3>Find your way around</h3><p>OSM groups composing, importing, saved scores, playable notes, practice, and tuning on the home screen. The lower-right link opens kiri’s GitHub profile.</p><h3>Choose an ocarina sound</h3><p>Open the gear and choose oc1, oc2, or oc3. Hear sample plays Ode to Joy. The browser remembers your choice for score playback and note previews.</p><h3>Hear and see fingerings</h3><p>Click a pitch or press its displayed letter. The centered chart shows the matching fingering and pitch.</p><h3>Tune a real ocarina</h3><p>Start the microphone and play a steady note. The tuner shows pitch, frequency, sharp or flat feedback, and the corresponding Alto C fingering.</p></details><details class="osm-help-card"><summary>Import and capture</summary><button type="button" class="ctrl" data-tour-topic="Import and capture">Show in tutorial</button><h3>Paste notes or ABC</h3><p>Paste note names such as F4 - C5 - Bb4, or single-voice ABC. Notes outside A4–F6 appear in yellow in the editor. Supported ABC can include key signatures, accidentals, rests, ties, tuplets, and inline tempo changes.</p><h3>Read a fingering image</h3><p>Upload clear PNG or JPG fingering diagrams or a PDF. OSM reads numbered PDF labels when present and otherwise tries scanning the diagrams. Correct detected pitches in the review dialog before continuing. Image imports start with one beat per event.</p><h3>Import a MIDI melody</h3><p>Choose a monophonic track. Written durations and rests are retained, and tempo changes are used in playback and notation. If possible, OSM offers to transpose an out-of-range melody.</p><h3>Import MusicXML</h3><p>Import a single partwise melody. OSM reads pitch, key, meter, rests, forward gaps, ties, tuplet durations, and tempo directions. Multipart scores, chords, grace notes, and multiple simultaneous voices need preparation elsewhere.</p><h3>Transcribe a recording</h3><p>Select a solo WAV or MP3. Review the resulting pitches and estimated tempo before opening the take as a score.</p><h3>Record with the microphone</h3><p>Optionally measure room noise, then play one note at a time. The waveform and input meter show what the microphone receives. Leave a clear gap between repeated pitches.</p><h3>Review a detected melody</h3><p>Stop capture to see pitch choices, uncertain notes, durations, and the estimated tempo. Correct pitches and adjust the tempo before opening the take. Detected pauses can become rests.</p><h3>Restore a project backup</h3><p>Import an exported JSON project to restore its score and settings. Saved scores are stored in this browser and listed under View existing scores.</p></details><details class="osm-help-card"><summary>Score editing</summary><button type="button" class="ctrl" data-tour-topic="Score editing">Show in tutorial</button><h3>Compose a score</h3><p>Make new score opens a blank editor. Choose a playable pitch to hear it and insert it after the current selection.</p><h3>Name and save a score</h3><p>Enter a title and optional source or author. Save score stores the project in this browser. Use a project backup for another device or browser.</p><h3>Edit the sequence</h3><p>Click a card to select and hear it. Shift-click selects a range. Command-click on Mac or Ctrl-click on Windows toggles individual cards. Arrow keys move the selection. Delete removes it. Right-click to hear, insert, move, remove, or audition a replacement with Swap note.</p><h3>Change pitch or duration</h3><p>Use the selected-note controls to edit pitch and beats. The fingering, playback, staff, and exports share the same score events.</p><h3>Insert, split, and merge</h3><p>Insert a rest for silence. Split divides a duration. Merge combines adjacent events of the same pitch. Copy event and Paste event reuse a pitch and duration.</p><h3>Undo and redo</h3><p>Use Undo and Redo for note and notation changes in the current editing session. Command-Z or Control-Z undoes an edit. Add Shift to redo.</p><h3>Edit in the piano roll</h3><p>Select a note in the timeline. Drag its right edge to resize its written duration. The Beats field is a keyboard-friendly alternative.</p><h3>Fit the instrument range</h3><p>Use the semitone and octave buttons above the note cards to shift selected pitches together. Yellow cards mark pitches outside A4–F6. Use Transpose under Timeline and arrangement to shift the entire score.</p></details><details class="osm-help-card"><summary>Notation and playback</summary><button type="button" class="ctrl" data-tour-topic="Notation and playback">Show in tutorial</button><h3>Set meter, key, and tempo</h3><p>Choose a time signature, major key signature, and base tempo. A key signature changes how accidentals are written while preserving pitches. Applying a new global tempo replaces the imported tempo map and exact timing.</p><h3>Read and edit the staff</h3><p>Open notation and click a note to focus its pitch control. The timing table lets you edit written beats and apply them to playback. Long pitches can be tied across barlines.</p><h3>Read triplets and tempo changes</h3><p>Eligible equal-duration 3:2 triplets show a triplet marking. Imported tempo changes appear in the staff and carry through ABC and MusicXML exports.</p><h3>Play a score</h3><p>Play all follows the rhythm and updates the large fingering and staff highlights without scrolling the page. Use Stop, Loop, or Playback speed. Press Enter to step through notes manually.</p><h3>Tap in a rhythm</h3><p>Select a starting note, start Record Enter timing, and tap Enter in rhythm. Finish recording, then apply exact intervals or quantized written durations.</p></details><details class="osm-help-card"><summary>Practice</summary><button type="button" class="ctrl" data-tour-topic="Practice">Show in tutorial</button><h3>Practice without saving</h3><p>Choose pasted notes or ABC, uploaded fingering tabs, or a JSON project backup. Play Along is also available directly from the Score Editor.</p><h3>Note recognition</h3><p>Start the microphone and play the pitch shown by name. A match flashes green before the next prompt. Open Choose pitches and click or right-click to build a custom drill.</p><h3>Follow the fingering</h3><p>The large diagram shows the next fingering. With the microphone running, the corner shows the detected pitch. A blue outline marks the target, and a correct match turns the card green.</p><h3>Advance and restart</h3><p>Play a matching note or press Enter to advance manually. Pause stops listening. Restart clears progress in the current range. The arrow below the cards expands the default eight-note view.</p><h3>Work on a specific part</h3><p>Choose the first and last notes in the range picker. Practice selected notes uses only that range. Loop section repeats it, and Practice full sequence restores the song.</p><h3>Practice with a beat</h3><p>Set the practice BPM and enable the metronome for a reference click. Timed practice gives a visual four-beat count-in, then reports early or late matches. The input offset is a manual adjustment.</p><h3>Review feedback</h3><p>Play Along tracks matched notes and reports expected versus heard pitch. Completed microphone sessions appear in Recent practice. Pitch accuracy measures detected attempts, including wrong notes.</p></details><details class="osm-help-card"><summary>Export</summary><button type="button" class="ctrl" data-tour-topic="Export">Show in tutorial</button><h3>Export sheet music</h3><p>Choose Music score for ABC, MusicXML, or an engraved PDF. ABC and MusicXML retain supported triplets and tempo marks. Copy for chat includes notation and available measured timing.</p><h3>Export fingering tabs</h3><p>Choose Ocarina tabs. Edit the title, credit, spaces, and line breaks. Preview the fingerings and rhythm, then download PDF, SVG, or PNG, or copy codes for Ocarina Tabs Creator.</p><h3>Keep a project backup</h3><p>Choose Project backup and download JSON. Reimport it to edit the project or open it in Practice. The separate installable preview package supports offline use after a first online visit in a compatible browser.</p></details></div>
 <p>Made by <a href="https://github.com/kyirinou" target="_blank" rel="noopener noreferrer">kiri on GitHub</a>.</p>
 </section>
 <dialog id="oc93-scan-review" aria-labelledby="oc93-scan-title">
@@ -2236,6 +2253,7 @@ find(prefix+'-start').disabled=false;
 find(prefix+'-stop').disabled=true;
 if(prefix==='convert')stopSoundCapture();
 if(prefix==='practice')find('practice-pitch').textContent='—';
+if(prefix==='recognition')resetRecognitionFeedback();
 if(message)find(prefix+'-status').textContent=message;
 }
 async function listenMic(mode,onPitch){
@@ -2553,6 +2571,65 @@ draftChanged=true;openPage('editor');report('Imported '+take.notes.length+' note
 });
 
 
+const recognitionPitches=Array.from({length:21},(_,i)=>69+i);
+let recognitionPool=new Set(recognitionPitches);
+let recognitionPitch=null,recognitionTimer=null,recognitionNeedsRelease=false;
+const recognitionTarget=find('recognition-target');
+const recognitionButtons=new Map();
+function resetRecognitionFeedback(){
+clearTimeout(recognitionTimer);
+recognitionTimer=null;
+recognitionNeedsRelease=false;
+recognitionTarget.classList.remove('recognition-hit');
+}
+function nextRecognitionPitch(){
+const pitches=[...recognitionPool];
+const choices=pitches.length>1?pitches.filter(pitch=>pitch!==recognitionPitch):pitches;
+recognitionPitch=choices.length?choices[Math.floor(Math.random()*choices.length)]:null;
+recognitionTarget.textContent=recognitionPitch===null?'—':name(recognitionPitch);
+}
+function updateRecognitionPool(){
+resetRecognitionFeedback();
+for(const [pitch,button] of recognitionButtons)button.setAttribute('aria-pressed',String(recognitionPool.has(pitch)));
+if(!recognitionPool.size&&micSession?.mode==='recognition')stopMic();
+find('recognition-start').disabled=!recognitionPool.size||micSession?.mode==='recognition';
+find('recognition-status').textContent=!recognitionPool.size?'Choose at least one pitch.':
+micSession?.mode==='recognition'?'Play the displayed pitch.':'Start the microphone and play the displayed pitch.';
+nextRecognitionPitch();
+}
+for(const pitch of recognitionPitches){
+const button=document.createElement('button');
+button.type='button';button.className='ctrl';button.textContent=name(pitch);
+function togglePitch(){
+if(recognitionPool.has(pitch))recognitionPool.delete(pitch);else recognitionPool.add(pitch);
+updateRecognitionPool();
+}
+button.onclick=togglePitch;
+button.oncontextmenu=event=>{event.preventDefault();togglePitch();};
+recognitionButtons.set(pitch,button);
+find('recognition-pool').append(button);
+}
+find('recognition-all').onclick=()=>{recognitionPool=new Set(recognitionPitches);updateRecognitionPool();};
+find('recognition-clear').onclick=()=>{recognitionPool.clear();updateRecognitionPool();};
+find('recognition-stop').onclick=()=>stopMic('Paused. Start the microphone to resume.');
+find('recognition-start').onclick=()=>listenMic('recognition',(midi,frequency,cents)=>{
+if(recognitionNeedsRelease){
+if(midi!==recognitionPitch)recognitionNeedsRelease=false;
+return;
+}
+if(recognitionTimer!==null||midi!==recognitionPitch||Math.abs(cents)>45)return;
+recognitionTarget.classList.add('recognition-hit');
+find('recognition-status').textContent='Correct!';
+recognitionTimer=setTimeout(()=>{
+recognitionTimer=null;
+recognitionTarget.classList.remove('recognition-hit');
+recognitionNeedsRelease=recognitionPool.size===1;
+nextRecognitionPitch();
+find('recognition-status').textContent=recognitionNeedsRelease?'Release the note, then play it again.':'Play the displayed pitch.';
+},650);
+});
+updateRecognitionPool();
+
 const noteMenu=find('note-menu'), swapDialog=find('swap-dialog'), swapStatus=find('swap-status');
 const swapChoices=find('swap-choices'), swapConfirm=find('swap-confirm');
 let swapIndex=-1, swapPitch=null;
@@ -2666,7 +2743,7 @@ const tutorialSteps=[
   "import",
   "#oc93-import-text",
   "Paste notes or ABC",
-  "Paste note names or single-voice ABC. Supported ABC can include key signatures, accidentals, rests, ties, tuplets, and inline tempo changes."
+  "Paste note names such as F4 - C5 - Bb4, or single-voice ABC. Notes outside A4–F6 appear in yellow in the editor. Supported ABC can include key signatures, accidentals, rests, ties, tuplets, and inline tempo changes."
  ],
  [
   "Import and capture",
@@ -2736,7 +2813,7 @@ const tutorialSteps=[
   "editor",
   "#oc93-sequence",
   "Edit the sequence",
-  "Click a card to select and hear it. Arrow keys move the selection. Delete removes it. Right-click to hear, insert, move, remove, or audition a replacement with Swap note."
+  "Click a card to select and hear it. Shift-click selects a range. Command-click on Mac or Ctrl-click on Windows toggles individual cards. Arrow keys move the selection. Delete removes it. Right-click to hear, insert, move, remove, or audition a replacement with Swap note."
  ],
  [
   "Score editing",
@@ -2771,7 +2848,7 @@ const tutorialSteps=[
   "editor",
   "#oc93-transpose",
   "Fit the instrument range",
-  "Shift the whole melody by semitones or shift one selected note by an octave. OSM checks the 12-hole Alto C range, A4 through F6."
+  "Use the semitone and octave buttons above the note cards to shift selected pitches together. Yellow cards mark pitches outside A4–F6. Use Transpose under Timeline and arrangement to shift the entire score."
  ],
  [
   "Notation and playback",
@@ -2814,6 +2891,13 @@ const tutorialSteps=[
   "#oc93-practice-options",
   "Practice without saving",
   "Choose pasted notes or ABC, uploaded fingering tabs, or a JSON project backup. Play Along is also available directly from the Score Editor."
+ ],
+ [
+  "Practice",
+  "practice-setup",
+  "#oc93-practice-recognition",
+  "Note recognition",
+  "Start the microphone and play the pitch shown by name. A match flashes green before the next prompt. Open Choose pitches and click or right-click to build a custom drill."
  ],
  [
   "Practice",
@@ -2885,7 +2969,7 @@ const [topic,page,selector,heading,description]=tutorialSteps[tutorialIndex];
 tutorialTopic.value=topic;
 if(page==='practice'&&currentPage!=='practice')showPractice([72,74,76,77,79,77,76,74,72],'help');
 else openPage(page);
-if(page==='practice-setup')choosePractice(null);
+if(page==='practice-setup')choosePractice(selector==='#oc93-practice-recognition'?'recognition':null);
 const exportModes={'#oc93-music-panel':'music','#oc93-tabs-panel':'tabs','#oc93-backup':'backup'};
 if(exportModes[selector]){
 const menu=find('export-kind');menu.value=exportModes[selector];menu.dispatchEvent(new Event('change'));
@@ -2939,6 +3023,7 @@ composeKeys.append(button);
 }
 let practiceMode=null;
 function choosePractice(mode){
+if(practiceMode==='recognition'&&mode!=='recognition'&&micSession?.mode==='recognition')stopMic('Microphone stopped.');
 if(mode===null){
 const list=find('practice-history');list.replaceChildren();
 let history=[];try{history=JSON.parse(localStorage.getItem('osm-practice-history')||'[]');}catch{}
@@ -2951,7 +3036,7 @@ list.append(item);
 practiceMode=mode;pdfRequest++;find('reference-hint').hidden=true;
 find('practice-options').hidden=mode!==null;
 find('practice-mode-back').hidden=mode===null;
-for(const choice of ['paste','tabs','backup'])find('practice-'+choice).hidden=choice!==mode;
+for(const choice of ['paste','tabs','backup','recognition'])find('practice-'+choice).hidden=choice!==mode;
 report('');
 }
 for(const button of root.querySelectorAll('[data-practice-mode]')){

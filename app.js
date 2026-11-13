@@ -1145,6 +1145,7 @@ find(prefix+'-start').disabled=false;
 find(prefix+'-stop').disabled=true;
 if(prefix==='convert')stopSoundCapture();
 if(prefix==='practice')find('practice-pitch').textContent='—';
+if(prefix==='recognition')resetRecognitionFeedback();
 if(message)find(prefix+'-status').textContent=message;
 }
 async function listenMic(mode,onPitch){
@@ -1462,6 +1463,65 @@ draftChanged=true;openPage('editor');report('Imported '+take.notes.length+' note
 });
 
 
+const recognitionPitches=Array.from({length:21},(_,i)=>69+i);
+let recognitionPool=new Set(recognitionPitches);
+let recognitionPitch=null,recognitionTimer=null,recognitionNeedsRelease=false;
+const recognitionTarget=find('recognition-target');
+const recognitionButtons=new Map();
+function resetRecognitionFeedback(){
+clearTimeout(recognitionTimer);
+recognitionTimer=null;
+recognitionNeedsRelease=false;
+recognitionTarget.classList.remove('recognition-hit');
+}
+function nextRecognitionPitch(){
+const pitches=[...recognitionPool];
+const choices=pitches.length>1?pitches.filter(pitch=>pitch!==recognitionPitch):pitches;
+recognitionPitch=choices.length?choices[Math.floor(Math.random()*choices.length)]:null;
+recognitionTarget.textContent=recognitionPitch===null?'—':name(recognitionPitch);
+}
+function updateRecognitionPool(){
+resetRecognitionFeedback();
+for(const [pitch,button] of recognitionButtons)button.setAttribute('aria-pressed',String(recognitionPool.has(pitch)));
+if(!recognitionPool.size&&micSession?.mode==='recognition')stopMic();
+find('recognition-start').disabled=!recognitionPool.size||micSession?.mode==='recognition';
+find('recognition-status').textContent=!recognitionPool.size?'Choose at least one pitch.':
+micSession?.mode==='recognition'?'Play the displayed pitch.':'Start the microphone and play the displayed pitch.';
+nextRecognitionPitch();
+}
+for(const pitch of recognitionPitches){
+const button=document.createElement('button');
+button.type='button';button.className='ctrl';button.textContent=name(pitch);
+function togglePitch(){
+if(recognitionPool.has(pitch))recognitionPool.delete(pitch);else recognitionPool.add(pitch);
+updateRecognitionPool();
+}
+button.onclick=togglePitch;
+button.oncontextmenu=event=>{event.preventDefault();togglePitch();};
+recognitionButtons.set(pitch,button);
+find('recognition-pool').append(button);
+}
+find('recognition-all').onclick=()=>{recognitionPool=new Set(recognitionPitches);updateRecognitionPool();};
+find('recognition-clear').onclick=()=>{recognitionPool.clear();updateRecognitionPool();};
+find('recognition-stop').onclick=()=>stopMic('Paused. Start the microphone to resume.');
+find('recognition-start').onclick=()=>listenMic('recognition',(midi,frequency,cents)=>{
+if(recognitionNeedsRelease){
+if(midi!==recognitionPitch)recognitionNeedsRelease=false;
+return;
+}
+if(recognitionTimer!==null||midi!==recognitionPitch||Math.abs(cents)>45)return;
+recognitionTarget.classList.add('recognition-hit');
+find('recognition-status').textContent='Correct!';
+recognitionTimer=setTimeout(()=>{
+recognitionTimer=null;
+recognitionTarget.classList.remove('recognition-hit');
+recognitionNeedsRelease=recognitionPool.size===1;
+nextRecognitionPitch();
+find('recognition-status').textContent=recognitionNeedsRelease?'Release the note, then play it again.':'Play the displayed pitch.';
+},650);
+});
+updateRecognitionPool();
+
 const noteMenu=find('note-menu'), swapDialog=find('swap-dialog'), swapStatus=find('swap-status');
 const swapChoices=find('swap-choices'), swapConfirm=find('swap-confirm');
 let swapIndex=-1, swapPitch=null;
@@ -1575,7 +1635,7 @@ const tutorialSteps=[
   "import",
   "#oc93-import-text",
   "Paste notes or ABC",
-  "Paste note names or single-voice ABC. Supported ABC can include key signatures, accidentals, rests, ties, tuplets, and inline tempo changes."
+  "Paste note names such as F4 - C5 - Bb4, or single-voice ABC. Notes outside A4–F6 appear in yellow in the editor. Supported ABC can include key signatures, accidentals, rests, ties, tuplets, and inline tempo changes."
  ],
  [
   "Import and capture",
@@ -1645,7 +1705,7 @@ const tutorialSteps=[
   "editor",
   "#oc93-sequence",
   "Edit the sequence",
-  "Click a card to select and hear it. Arrow keys move the selection. Delete removes it. Right-click to hear, insert, move, remove, or audition a replacement with Swap note."
+  "Click a card to select and hear it. Shift-click selects a range. Command-click on Mac or Ctrl-click on Windows toggles individual cards. Arrow keys move the selection. Delete removes it. Right-click to hear, insert, move, remove, or audition a replacement with Swap note."
  ],
  [
   "Score editing",
@@ -1680,7 +1740,7 @@ const tutorialSteps=[
   "editor",
   "#oc93-transpose",
   "Fit the instrument range",
-  "Shift the whole melody by semitones or shift one selected note by an octave. OSM checks the 12-hole Alto C range, A4 through F6."
+  "Use the semitone and octave buttons above the note cards to shift selected pitches together. Yellow cards mark pitches outside A4–F6. Use Transpose under Timeline and arrangement to shift the entire score."
  ],
  [
   "Notation and playback",
@@ -1723,6 +1783,13 @@ const tutorialSteps=[
   "#oc93-practice-options",
   "Practice without saving",
   "Choose pasted notes or ABC, uploaded fingering tabs, or a JSON project backup. Play Along is also available directly from the Score Editor."
+ ],
+ [
+  "Practice",
+  "practice-setup",
+  "#oc93-practice-recognition",
+  "Note recognition",
+  "Start the microphone and play the pitch shown by name. A match flashes green before the next prompt. Open Choose pitches and click or right-click to build a custom drill."
  ],
  [
   "Practice",
@@ -1794,7 +1861,7 @@ const [topic,page,selector,heading,description]=tutorialSteps[tutorialIndex];
 tutorialTopic.value=topic;
 if(page==='practice'&&currentPage!=='practice')showPractice([72,74,76,77,79,77,76,74,72],'help');
 else openPage(page);
-if(page==='practice-setup')choosePractice(null);
+if(page==='practice-setup')choosePractice(selector==='#oc93-practice-recognition'?'recognition':null);
 const exportModes={'#oc93-music-panel':'music','#oc93-tabs-panel':'tabs','#oc93-backup':'backup'};
 if(exportModes[selector]){
 const menu=find('export-kind');menu.value=exportModes[selector];menu.dispatchEvent(new Event('change'));
@@ -1848,6 +1915,7 @@ composeKeys.append(button);
 }
 let practiceMode=null;
 function choosePractice(mode){
+if(practiceMode==='recognition'&&mode!=='recognition'&&micSession?.mode==='recognition')stopMic('Microphone stopped.');
 if(mode===null){
 const list=find('practice-history');list.replaceChildren();
 let history=[];try{history=JSON.parse(localStorage.getItem('osm-practice-history')||'[]');}catch{}
@@ -1860,7 +1928,7 @@ list.append(item);
 practiceMode=mode;pdfRequest++;find('reference-hint').hidden=true;
 find('practice-options').hidden=mode!==null;
 find('practice-mode-back').hidden=mode===null;
-for(const choice of ['paste','tabs','backup'])find('practice-'+choice).hidden=choice!==mode;
+for(const choice of ['paste','tabs','backup','recognition'])find('practice-'+choice).hidden=choice!==mode;
 report('');
 }
 for(const button of root.querySelectorAll('[data-practice-mode]')){

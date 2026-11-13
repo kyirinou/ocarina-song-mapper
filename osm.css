@@ -113,3 +113,8 @@ body:has(#oc93-page-home:not([hidden]))>h1{text-align:center;font-size:clamp(2.5
 #oc93 .editor-meta input{width:100%;box-sizing:border-box}
 
 #oc93 .note.outside-range{background:#fff1ae;border-color:#a47713;color:#382900}
+
+#oc93 [data-practice-mode="recognition"]{grid-column:1/-1;text-align:center}
+#oc93 #oc93-recognition-target{display:block;text-align:center;font-size:clamp(2.75rem,9vw,5rem);font-weight:700;padding:.2em;border-radius:.2em}
+#oc93 #oc93-recognition-target.recognition-hit{background:#dcf4e3;color:#195d34}
+#oc93 #oc93-recognition-pool [aria-pressed="true"]{background:var(--viz-accent);color:white}

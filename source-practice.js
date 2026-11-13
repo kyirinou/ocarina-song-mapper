@@ -42,6 +42,7 @@ find(prefix+'-start').disabled=false;
 find(prefix+'-stop').disabled=true;
 if(prefix==='convert')stopSoundCapture();
 if(prefix==='practice')find('practice-pitch').textContent='—';
+if(prefix==='recognition')resetRecognitionFeedback();
 if(message)find(prefix+'-status').textContent=message;
 }
 async function listenMic(mode,onPitch){
@@ -358,3 +359,62 @@ loadProject({id:newId(),title:'Captured score',author:'',tempo:bpm,...take});
 draftChanged=true;openPage('editor');report('Imported '+take.notes.length+' notes and rests.');
 });
 
+
+const recognitionPitches=Array.from({length:21},(_,i)=>69+i);
+let recognitionPool=new Set(recognitionPitches);
+let recognitionPitch=null,recognitionTimer=null,recognitionNeedsRelease=false;
+const recognitionTarget=find('recognition-target');
+const recognitionButtons=new Map();
+function resetRecognitionFeedback(){
+clearTimeout(recognitionTimer);
+recognitionTimer=null;
+recognitionNeedsRelease=false;
+recognitionTarget.classList.remove('recognition-hit');
+}
+function nextRecognitionPitch(){
+const pitches=[...recognitionPool];
+const choices=pitches.length>1?pitches.filter(pitch=>pitch!==recognitionPitch):pitches;
+recognitionPitch=choices.length?choices[Math.floor(Math.random()*choices.length)]:null;
+recognitionTarget.textContent=recognitionPitch===null?'—':name(recognitionPitch);
+}
+function updateRecognitionPool(){
+resetRecognitionFeedback();
+for(const [pitch,button] of recognitionButtons)button.setAttribute('aria-pressed',String(recognitionPool.has(pitch)));
+if(!recognitionPool.size&&micSession?.mode==='recognition')stopMic();
+find('recognition-start').disabled=!recognitionPool.size||micSession?.mode==='recognition';
+find('recognition-status').textContent=!recognitionPool.size?'Choose at least one pitch.':
+micSession?.mode==='recognition'?'Play the displayed pitch.':'Start the microphone and play the displayed pitch.';
+nextRecognitionPitch();
+}
+for(const pitch of recognitionPitches){
+const button=document.createElement('button');
+button.type='button';button.className='ctrl';button.textContent=name(pitch);
+function togglePitch(){
+if(recognitionPool.has(pitch))recognitionPool.delete(pitch);else recognitionPool.add(pitch);
+updateRecognitionPool();
+}
+button.onclick=togglePitch;
+button.oncontextmenu=event=>{event.preventDefault();togglePitch();};
+recognitionButtons.set(pitch,button);
+find('recognition-pool').append(button);
+}
+find('recognition-all').onclick=()=>{recognitionPool=new Set(recognitionPitches);updateRecognitionPool();};
+find('recognition-clear').onclick=()=>{recognitionPool.clear();updateRecognitionPool();};
+find('recognition-stop').onclick=()=>stopMic('Paused. Start the microphone to resume.');
+find('recognition-start').onclick=()=>listenMic('recognition',(midi,frequency,cents)=>{
+if(recognitionNeedsRelease){
+if(midi!==recognitionPitch)recognitionNeedsRelease=false;
+return;
+}
+if(recognitionTimer!==null||midi!==recognitionPitch||Math.abs(cents)>45)return;
+recognitionTarget.classList.add('recognition-hit');
+find('recognition-status').textContent='Correct!';
+recognitionTimer=setTimeout(()=>{
+recognitionTimer=null;
+recognitionTarget.classList.remove('recognition-hit');
+recognitionNeedsRelease=recognitionPool.size===1;
+nextRecognitionPitch();
+find('recognition-status').textContent=recognitionNeedsRelease?'Release the note, then play it again.':'Play the displayed pitch.';
+},650);
+});
+updateRecognitionPool();
