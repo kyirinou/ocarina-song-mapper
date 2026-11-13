@@ -749,6 +749,10 @@ SOFTWARE.
 #oc93 .mic-chart{width:180px;height:125px;display:grid;place-items:center}
 #oc93 .mic-chart svg,#oc93 .practice-card svg{width:100%;height:100%}
 #oc93 .practice-toolbar{position:sticky;top:0;background:var(--viz-panel);padding:10px;border-radius:8px;z-index:1}
+#oc93 .range-notes{display:grid;grid-template-columns:repeat(auto-fill,minmax(66px,1fr));gap:6px;max-height:48vh;overflow:auto;padding:5px}
+#oc93 .range-notes button{display:grid;gap:3px;justify-items:center;padding:6px}
+#oc93 .range-notes button[aria-pressed=true]{background:#eaf2ff;border-color:#175ad1}
+#oc93-practice-range{width:min(570px,85vw);border:1px solid var(--viz-border);border-radius:12px;color:var(--viz-text)}
 #oc93 .practice-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(84px,1fr));gap:10px;margin-top:15px}
 #oc93 .practice-card{display:grid;justify-items:center;grid-template-rows:58px auto;border:2px solid var(--viz-border);border-radius:8px;padding:7px;scroll-margin-top:130px}
 #oc93 .practice-card.practice-next{border-color:#175ad1;box-shadow:0 0 0 2px #175ad1;background:#eaf2ff}
@@ -893,12 +897,22 @@ body:has(#oc93-page-home:not([hidden]))>h1{text-align:center;font-size:clamp(2.5
 <h2>Play Along</h2>
 <div class="practice-toolbar">
 <div class="toolbar"><button class="ctrl primary" id="oc93-practice-start">Start microphone</button>
-<button class="ctrl" id="oc93-practice-stop" disabled>Pause</button><button class="ctrl" id="oc93-practice-restart">Restart</button><button class="ctrl" id="oc93-practice-back">Back to Score Editor</button></div>
+<button class="ctrl" id="oc93-practice-stop" disabled>Pause</button><button class="ctrl" id="oc93-practice-restart">Restart</button><button class="ctrl" id="oc93-practice-part">Practice specific part</button><button class="ctrl" id="oc93-practice-full" hidden>Practice full sequence</button><button class="ctrl" id="oc93-practice-back">Back to Score Editor</button></div>
 <p id="oc93-practice-status" role="status"></p>
 </div>
 <div class="playback-fingering" style="position:relative"><span id="oc93-practice-pitch" style="position:absolute;top:10px;right:14px">—</span><div id="oc93-practice-chart" role="img" aria-label="Next fingering"></div></div>
 <div id="oc93-practice-grid" class="practice-grid" aria-label="Song fingering sequence"></div>
 <button class="ctrl" id="oc93-practice-expand" style="margin-top:12px" aria-controls="oc93-practice-grid" aria-expanded="false">↓ Show all notes</button>
+<dialog id="oc93-practice-range" aria-labelledby="oc93-range-title">
+<h3 id="oc93-range-title">Practice specific part</h3>
+<p>Click the first and last note of the part you want to practice.</p>
+<div class="range-notes" id="oc93-range-notes"></div>
+<p id="oc93-range-status" role="status"></p>
+<div class="toolbar">
+<button class="ctrl" id="oc93-range-cancel">Cancel</button>
+<button class="ctrl primary" id="oc93-range-use" disabled>Practice selected notes</button>
+</div>
+</dialog>
 </section>
 <section id="oc93-page-help" hidden>
 <h2>Help</h2>
@@ -907,7 +921,7 @@ body:has(#oc93-page-home:not([hidden]))>h1{text-align:center;font-size:clamp(2.5
 <div class="osm-help-card"><dt>Main menu</dt><dd><b>Make new score</b> opens a blank editor. <b>Import</b> accepts note names, supported ABC notation, a tab image, or a project backup. <b>View existing scores</b> lists saved projects. <b>Playable notes</b> opens the keyboard and fingering chart. <b>Main menu</b> returns home. The gear switches between the three ocarina sounds and lets you hear a sample.</dd></div>
 <div class="osm-help-card"><dt>Score Editor</dt><dd><b>Save score</b> keeps the title, source or author, pitches, and timing in this browser. <b>Export project backup</b> downloads a file you can reimport. <b>Add notes</b> opens the playable pitch list. Click a pitch to hear it and add it after the selection. The pitch and beats controls edit the selected note. <b>Insert after selection</b> adds a note, <b>Move earlier/later</b> changes its order, and <b>Remove note</b> or Delete on a selected card deletes it. Right-click a card for note actions. <b>Swap note</b> lets you hear replacement pitches before confirming and keeps the note’s timing.</dd></div>
 <div class="osm-help-card"><dt>Playback</dt><dd>Click a note block to hear and select it. Press <b>Enter</b> to replay it, then tap again for each next note. Arrow keys move the selection silently. <b>Play all</b> follows the score rhythm, updates the fingering diagram, and highlights the staff while you scroll freely. <b>Stop</b> ends playback, <b>Loop</b> repeats the song, and <b>Playback speed</b> scales the tempo.</dd></div>
-<div class="osm-help-card"><dt>Microphone tools</dt><dd><b>Ocarina tuner</b> shows your pitch, tuning and fingering. <b>Play Along</b> opens a fingering-only practice view. Start the microphone, play the blue fingering, and it turns green when matched. Briefly release between repeated notes. <b>Pause</b> stops listening and keeps your place. Enter steps through the fingerings. The pitch in the corner shows what the microphone hears. Restart returns to the first note. The arrow below the cards expands or collapses the sequence. <b>Convert sound</b> listens to one note at a time and captures pitches and timing. Leave a short, clear break between repeated pitches. <b>Stop capture</b> shows your take. <b>Open captured score</b> opens the take in the editor. <b>Practice</b> loads notes, ABC, or a project backup without saving a score. Choose Play uploaded ocarina tabs to read a compatible fingering PNG or OSM PDF and start microphone-guided practice.</dd></div>
+<div class="osm-help-card"><dt>Microphone tools</dt><dd><b>Ocarina tuner</b> shows your pitch, tuning and fingering. <b>Play Along</b> opens a fingering-only practice view. Start the microphone, play the blue fingering, and it turns green when matched. Briefly release between repeated notes. <b>Pause</b> stops listening and keeps your place. Enter steps through the fingerings. The pitch in the corner shows what the microphone hears. Restart returns to the first note in your current range. Practice specific part lets you select a range from the full sequence. The arrow below the cards expands or collapses the sequence. <b>Convert sound</b> listens to one note at a time and captures pitches and timing. Leave a short, clear break between repeated pitches. <b>Stop capture</b> shows your take. <b>Open captured score</b> opens the take in the editor. <b>Practice</b> loads notes, ABC, or a project backup without saving a score. Choose Play uploaded ocarina tabs to read a compatible fingering PNG or OSM PDF and start microphone-guided practice.</dd></div>
 <div class="osm-help-card"><dt>Recording and notation</dt><dd><b>Record Enter timing</b> measures time between taps. <b>Finish recording</b> ends a take early. <b>View and edit notation</b> opens the staff and note table. <b>Apply tempo to captured timing</b> recalculates the written beats. <b>Use these durations for Play all</b> applies the edited beats. <b>Use exact recorded intervals</b> plays back your measured timing.</dd></div>
 <div class="osm-help-card"><dt>Export and share</dt><dd><b>Export → Music score</b> offers an engraved PDF and editable ABC. <b>Copy for chat</b> copies notation and any measured timings. <b>Export → Ocarina tabs</b> opens the tab layout editor. Preview or download large fingerings with the written rhythm underneath, or copy the codes for Ocarina Tabs Creator.</dd></div>
 <div class="osm-help-card"><dt>Playable notes</dt><dd>Click a pitch or press its displayed letter. The diagram below the keyboard shows the fingering.</dd></div>
@@ -1175,7 +1189,7 @@ const index=paletteKeys.indexOf(e.code.startsWith('Key')?e.code.slice(3):'');
 if(index>=0){e.preventDefault();selectFingering(69+index,true);}
 return;
 }
-if(currentPage==='practice'&&e.code==='Enter'&&!e.shiftKey&&!e.defaultPrevented&&!e.target?.closest?.('button,a')){
+if(currentPage==='practice'&&!rangeDialog.open&&e.code==='Enter'&&!e.shiftKey&&!e.defaultPrevented&&!e.target?.closest?.('button,a')){
 e.preventDefault();advancePractice(false);return;
 }
 if(currentPage!=='editor'||micSession?.mode==='convert'||swapDialog.open||!noteMenu.hidden)return;
@@ -1933,7 +1947,44 @@ const midi=practiceNotes[practiceIndex];
 chart.setAttribute('aria-label',midi===undefined?'Practice complete':'Next fingering: '+name(midi));
 if(midi!==undefined)chart.append(makeFinger(midi));
 }
-let practiceNotes=[], practiceReturn='editor', practiceExpanded=false;
+let practiceNotes=[], fullPracticeNotes=[], practiceOffset=0, practiceReturn='editor', practiceExpanded=false;
+const rangeDialog=find('practice-range');
+let rangeStart=null, rangeEnd=null;
+find('practice-part').addEventListener('click',()=>{
+const list=find('range-notes');
+list.replaceChildren();rangeStart=null;rangeEnd=null;
+find('range-status').textContent='Choose a starting note.';
+find('range-use').disabled=true;
+fullPracticeNotes.forEach((midi,i)=>{
+const button=document.createElement('button');
+button.className='ctrl';
+button.textContent=(i+1)+' · '+name(midi);
+button.setAttribute('aria-pressed','false');
+button.addEventListener('click',()=>{
+if(rangeStart===null||rangeEnd!==null){rangeStart=i;rangeEnd=null;}
+else rangeEnd=i;
+const first=Math.min(rangeStart,rangeEnd??rangeStart),last=Math.max(rangeStart,rangeEnd??rangeStart);
+[...list.children].forEach((card,j)=>card.setAttribute('aria-pressed',String(j>=first&&j<=last)));
+find('range-status').textContent=rangeEnd===null?'Start: note '+(first+1)+'. Choose an ending note.':
+'Selected notes '+(first+1)+'–'+(last+1)+' ('+(last-first+1)+').';
+find('range-use').disabled=rangeEnd===null;
+});
+list.append(button);
+});
+rangeDialog.showModal();
+});
+find('range-cancel').addEventListener('click',()=>rangeDialog.close());
+find('range-use').addEventListener('click',()=>{
+if(rangeEnd===null)return;
+const first=Math.min(rangeStart,rangeEnd),last=Math.max(rangeStart,rangeEnd);
+rangeDialog.close();setPracticePart(first,last+1);
+});
+find('practice-full').addEventListener('click',()=>setPracticePart(0,fullPracticeNotes.length));
+function setPracticePart(first,end){
+stopMic();practiceOffset=first;practiceNotes=fullPracticeNotes.slice(first,end);
+find('practice-full').hidden=first===0&&end===fullPracticeNotes.length;
+renderPracticeCards();
+}
 function updatePracticeWindow(){
 const start=Math.floor(Math.min(practiceIndex,practiceCards.length-1)/8)*8;
 practiceCards.forEach((card,i)=>{card.hidden=!practiceExpanded&&(i<start||i>=start+8);});
@@ -1957,15 +2008,18 @@ find('practice-expand').addEventListener('click',()=>{
 practiceExpanded=!practiceExpanded;updatePracticeWindow();
 find('practice-grid').focus({preventScroll:true});
 });
-function showPractice(pitches=practiceNotes,back=practiceReturn){
-practiceNotes=[...pitches];practiceReturn=back;
-if(!practiceNotes.length){report('Add notes before starting Play Along.');return;}
+function showPractice(pitches,back=practiceReturn){
+practiceReturn=back;
+if(!pitches.length){report('Add notes before starting Play Along.');return;}
 openPage('practice');
 find('practice-back').textContent=back==='editor'?'Back to Score Editor':'Back to Practice';
+fullPracticeNotes=[...pitches];setPracticePart(0,pitches.length);
+}
+function renderPracticeCards(){
 const grid=find('practice-grid');grid.replaceChildren();grid.tabIndex=-1;grid.focus({preventScroll:true});
 practiceCards=practiceNotes.map((midi,i)=>{
 const card=document.createElement('div');card.className='practice-card';
-const label=document.createElement('span');label.textContent=i+1;
+const label=document.createElement('span');label.textContent=practiceOffset+i+1;
 card.append(makeFinger(midi),label);grid.append(card);return card;
 });
 find('practice-pitch').textContent='—';
@@ -1975,7 +2029,7 @@ find('play-along').addEventListener('click',()=>showPractice(notes,'editor'));
 find('practice-back').addEventListener('click',()=>openPage(practiceReturn));
 find('practice-stop').addEventListener('click',()=>stopMic('Paused. Start the microphone to resume.'));
 find('practice-start').addEventListener('click',()=>{
-if(practiceIndex===practiceNotes.length)showPractice();
+if(practiceIndex===practiceNotes.length)restartPractice();
 let previous=null;
 find('practice-grid').focus({preventScroll:true});
 listenMic('practice',(midi,frequency,cents)=>{
