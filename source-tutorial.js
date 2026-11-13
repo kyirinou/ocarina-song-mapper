@@ -40,7 +40,7 @@ const tutorialSteps=[
   "import",
   "#oc93-import-image",
   "Read a fingering image",
-  "Upload clear PNG or JPG fingering diagrams or a PDF. OSM reads numbered PDF labels when present and otherwise tries scanning the diagrams. Correct detected pitches in the review dialog before continuing. Image imports start with one beat per event."
+  "Upload clear PNG or JPG fingering diagrams or a PDF. OSM assigns pitches automatically for supported diagrams. Review them before importing. For an unfamiliar layout, use Teach this layout to label each distinct fingering. OSM reads numbered PDF labels when present and otherwise tries scanning the diagrams. Correct detected pitches in the review dialog before continuing. Image imports start with one beat per event."
  ],
  [
   "Import and capture",
@@ -82,7 +82,7 @@ const tutorialSteps=[
   "import",
   "#oc93-restore",
   "Restore a project backup",
-  "Import an exported JSON project to restore its score and settings. Saved scores are stored in this browser and listed under Recent scores on the main menu."
+  "Import an exported JSON project to restore its score and settings. Saved scores are stored in this browser and listed under Recent scores on the main menu. Right-click a recent score and choose Delete, or open it and choose File → Delete score."
  ],
  [
   "Score editing",
@@ -103,7 +103,7 @@ const tutorialSteps=[
   "editor",
   "#oc93-save",
   "Name and save a score",
-  "Enter a title and optional source or author. Save score stores the project in this browser. Use a project backup for another device or browser."
+  "Choose File → Rename to edit the title and source or author. Use Save score to keep your changes. The Edit history panel shows dated changes and saves."
  ],
  [
   "Score editing",
@@ -241,23 +241,23 @@ const tutorialSteps=[
  [
   "Export",
   "editor",
-  "#oc93-music-panel",
+  "#oc93-export-options",
   "Export sheet music",
-  "Choose Music score for ABC, MusicXML, or an engraved PDF. ABC and MusicXML retain supported triplets and tempo marks. Copy for chat includes notation and available measured timing."
+  "Open File → Export for ABC, MusicXML, or an engraved PDF. ABC and MusicXML retain supported triplets and tempo marks. Copy for chat includes notation and available measured timing."
  ],
  [
   "Export",
   "editor",
-  "#oc93-tabs-panel",
+  "#oc93-tab-creator",
   "Export fingering tabs",
-  "Choose Ocarina tabs. Edit the title, credit, spaces, and line breaks. Preview the fingerings and rhythm, then download PDF, SVG, or PNG, or copy codes for Ocarina Tabs Creator."
+  "Choose Edit → Open tab editor, or select Tab editor beside Staff. Edit the diagrams, spacing, title, and credit. Press Play to follow the highlighted fingerings. Tabs matching the score use its timing. A different tab sequence plays one beat per note. Use Save as PDF for a fingering sheet. Save the score once to find it in Recent scores. Tab drafts save automatically in this browser, and changes appear in Edit history."
  ],
  [
   "Export",
   "editor",
   "#oc93-backup",
   "Keep a project backup",
-  "Choose Project backup and download JSON. Reimport it to edit the project or open it in Practice. The separate installable preview package supports offline use after a first online visit in a compatible browser."
+  "Choose File → Export → Download project backup. Reimport it to edit the project or open it in Practice. The separate installable preview package supports offline use after a first online visit in a compatible browser."
  ]
 ];
 let tutorialIndex=0,tutorialTarget=null;
@@ -280,10 +280,8 @@ if(selector==='#oc93-sequence')switchEditorView('sequence');
 if(selector==='#oc93-view'||selector==='.osm-viewbar')switchEditorView('staff');
 }
 if(page==='practice-setup')choosePractice(selector==='#oc93-practice-recognition'?'recognition':null);
-const exportModes={'#oc93-music-panel':'music','#oc93-tabs-panel':'tabs','#oc93-backup':'backup'};
-if(exportModes[selector]){
-const menu=find('export-kind');menu.value=exportModes[selector];menu.dispatchEvent(new Event('change'));
-}
+if(selector==='#oc93-tab-creator')switchEditorView('tabs');
+if(selector==='#oc93-export-options'||selector==='#oc93-backup')setExportMenu(true);
 tutorialTarget=root.querySelector(selector);
 for(let parent=tutorialTarget?.parentElement;parent;parent=parent.parentElement){if(parent.tagName==='DETAILS')parent.open=true;}
 tutorialTarget?.classList.add('tutorial-target');

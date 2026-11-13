@@ -39,11 +39,9 @@ return pitches;
 try{await task?.destroy();}finally{if(embedded)URL.revokeObjectURL(workerURL);}
 }
 }
-function scanFingerings(canvas, context, Path=Path2D, paths=fingerPaths){
-const {width,height}=canvas;
-const rgba=context.getImageData(0,0,width,height).data;
+function findFingeringBoxes(rgba,width,height,threshold,minRatio=.78,maxRatio=1.45,minWidth=22,minHeight=20){
 const ink=new Uint8Array(width*height);
-for(let i=0;i<ink.length;i++)ink[i]=rgba[4*i+3]>100&&rgba[4*i]+rgba[4*i+1]+rgba[4*i+2]<690?1:0;
+for(let i=0;i<ink.length;i++)ink[i]=rgba[4*i+3]>100&&rgba[4*i]+rgba[4*i+1]+rgba[4*i+2]<threshold?1:0;
 const visited=new Uint8Array(ink.length), boxes=[];
 for(let i=0;i<ink.length;i++){
 if(!ink[i]||visited[i])continue;
@@ -59,11 +57,68 @@ if(ink[n]&&!visited[n]){visited[n]=1;queue.push(n);}
 }
 }
 const w=r-l+1,h=b-t+1;
-if(w>=22&&h>=20&&w/h>.78&&w/h<1.45)boxes.push({l,t,w,h});
+if(w>=minWidth&&h>=minHeight&&w/h>minRatio&&w/h<maxRatio)boxes.push({l,t,w,h});
 }
-if(!boxes.length)throw Error('No matching ocarina diagrams found. Use a clear PNG with dark diagrams on a light background.');
+return {ink,boxes};
+}
+
+// STL-style diagrams have a wider outline and a different placement of the
+// same twelve holes. Points are relative to a 46 × 39 outline bounding box.
+const wideTabHoles=[[11,22],[6,24],[15,18],[17,14],[26,21],[36,11],
+[32,13],[14,27],[40,9],[16,35],[24,12],[31,30]];
+const wideTabOutline=[[43,0],[33,3],[21,9],[10,15],[2,23],[5,31],[18,31],[25,38],[29,30],[40,13],[45,3]];
+
+function scanWideFingerings(rgba,width,height){
+const {boxes}=findFingeringBoxes(rgba,width,height,585);
+const candidates=boxes.filter(({w,h})=>w/h>=1.12&&w/h<=1.27);
+if(!candidates.length)return null;
+
+function brightness(x,y){
+if(x<0||x>=width||y<0||y>=height)return 255;
+const offset=(y*width+x)*4;
+return rgba[offset+3]>128?(rgba[offset]+rgba[offset+1]+rgba[offset+2])/3:255;
+}
+function sample(x,y){
+const left=Math.floor(x),top=Math.floor(y),fx=x-left,fy=y-top;
+return (1-fy)*((1-fx)*brightness(left,top)+fx*brightness(left+1,top))+
+fy*((1-fx)*brightness(left,top+1)+fx*brightness(left+1,top+1));
+}
+const matches=[];
+for(const box of candidates){
+const {l,t,w,h}=box;
+const x=point=>l+(point+.5)*w/46-.5;
+const y=point=>t+(point+.5)*h/39-.5;
+const outline=wideTabOutline.filter(([px,py])=>[-1,0,1].some(dx=>[-1,0,1].some(dy=>
+sample(x(px+dx),y(py+dy))<175)));
+if(outline.length<9)continue;
+const mask=wideTabHoles.reduce((bits,[px,py],i)=>bits|((sample(x(px),y(py))<75?1:0)<<i),0);
+matches.push({...box,midi:fingeringMasks.indexOf(mask)+69});
+}
+if(matches.length<candidates.length*.8)return null;
+const typicalHeight=matches.map(box=>box.h).sort((a,b)=>a-b)[Math.floor(matches.length/2)];
+const rows=[];
+for(const box of matches.sort((a,b)=>a.t-b.t)){
+const row=rows.find(row=>Math.abs(row[0].t-box.t)<typicalHeight*.4);
+if(row)row.push(box);else rows.push([box]);
+}
+const ordered=rows.flatMap(row=>row.sort((a,b)=>a.l-b.l));
+const unreadable=ordered.findIndex(note=>note.midi<69);
+if(unreadable>=0)throw Error('Could not read fingering '+(unreadable+1)+' confidently. Try a clearer crop of the tabs.');
+return ordered.map(note=>note.midi);
+}
+
+function scanFingerings(canvas, context, Path=Path2D, paths=fingerPaths){
+const {width,height}=canvas;
+const rgba=context.getImageData(0,0,width,height).data;
+const wide=scanWideFingerings(rgba,width,height);
+if(wide)return wide;
+const detected=scanTabGeometry(rgba,width,height);
+if(detected)return detected;
+const {ink,boxes}=findFingeringBoxes(rgba,width,height,690);
+if(!boxes.length)throw Error('No matching ocarina diagrams found. Use a clear image with dark diagrams on a light background.');
 const size=64;
-const sample=context;
+const templateCanvas=document.createElement('canvas');templateCanvas.width=templateCanvas.height=size;
+const sample=templateCanvas.getContext('2d',{willReadFrequently:true});
 const template=paths.map(([w,h,d])=>{
 sample.save();sample.resetTransform();
 sample.clearRect(0,0,size,size);
@@ -99,7 +154,7 @@ if(scores[1].error-scores[0].error<3)throw Error('Could not read fingering '+(in
 return scores[0].midi;
 });
 }
-async function readPracticeTab(file){
+async function readPracticeTab(file,active){
 const signature=new Uint8Array(await file.slice(0,8).arrayBuffer());
 if((signature.join(',')==='137,80,78,71,13,10,26,10'||(signature[0]===255&&signature[1]===216&&signature[2]===255))){
 const bitmap=await createImageBitmap(file);
@@ -109,7 +164,11 @@ const canvas=document.createElement('canvas');
 canvas.width=bitmap.width;canvas.height=bitmap.height;
 const context=canvas.getContext('2d',{willReadFrequently:true});
 context.drawImage(bitmap,0,0);
-return scanFingerings(canvas,context);
+if(!active())return [];
+let pitches;
+try{pitches=scanFingerings(canvas,context);}
+catch{return (await teachTabLayout(canvas))??[];}
+return {pitches,canvas};
 }finally{bitmap.close();}
 }
 if(new TextDecoder().decode(signature).startsWith('%PDF-'))return readTabPitches(file);
@@ -133,13 +192,21 @@ const active=()=>request===pdfRequest&&(isPractice?
 currentPage==='practice-setup'&&practiceMode==='tabs':currentPage==='import');
 try{
 report('Reading the ocarina tabs…');
-const pitches=await readPracticeTab(file);
+const result=await readPracticeTab(file,active);
 if(!active())return;
-const review=find('scan-review');
-const text=find('scan-pitches');text.value=pitches.map(p=>p===null?'Rest':pitchText(p)).join(' ');
+let pitches=result.pitches??result;
+const review=find('scan-review'),text=find('scan-pitches');
+while(pitches.length&&active()){
+text.value=pitches.map(p=>p===null?'Rest':pitchText(p)).join(' ');
+find('scan-custom').hidden=!result.canvas;
 review.returnValue='';review.showModal();
-const confirmed=await new Promise(resolve=>review.addEventListener('close',()=>resolve(review.returnValue==='use'),{once:true}));
-if(!active()||!confirmed){if(active())report('');return;}
+const choice=await new Promise(resolve=>review.addEventListener('close',()=>resolve(review.returnValue),{once:true}));
+if(!active())return;
+if(choice==='use')break;
+if(choice!=='custom'){report('');return;}
+pitches=(await teachTabLayout(result.canvas))??[];
+}
+if(!active()||!pitches.length){if(active())report('');return;}
 const tokens=text.value.trim().split(/\s+/);
 if(!tokens.length||!tokens.every(t=>/^(Rest|[A-G]#?[456])$/i.test(t)))throw Error('Use pitch names separated by spaces, or Rest.');
 pitches.splice(0,pitches.length,...tokens.map(t=>t.toLowerCase()==='rest'?null:toMidi(t.toUpperCase())));

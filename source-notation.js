@@ -83,11 +83,19 @@ for(const row of lines){offsets.push(cursor);cursor+=row.length+1;}
 return {abc:header.concat(lines).join('\n'),glyphIndexes,engravedEvents:new Map(tokens.map(t=>[offsets[t.line]+t.offset,t.index]))};
 }
 function drawStaff(){
+// ABCJS measures the visible container. Rendering while it is hidden caches
+// zero-height SVGs that stay blank when the same notation is shown again.
+if(currentPage!=='editor'||editorView!=='staff')return;
 const staff=find('staff');
 if(!score.events.length){staff.replaceChildren();scoreGroups.clear();return;}
-if(!window.ABCJS){loadNotation().then(()=>{if(currentPage==='editor'&&editorView==='staff')drawStaff();}).catch(loadError);return;}
+if(!window.ABCJS){loadNotation().then(drawStaff).catch(loadError);return;}
 const showTake=scorePlaybackIndex<0&&timingPanel.open&&!find('score').hidden&&take.length;
-const entries=showTake?take:scoreEntries();
+const entries=scoreEntries();
+if(showTake){
+for(const entry of take){
+if(entries[entry.index])entries[entry.index]=entry;
+}
+}
 const {abc,glyphIndexes,engravedEvents}=engravedScore(entries,showTake?tempo():score.tempo);
 const renderKey=abc+'\n'+glyphIndexes.join(',');
 if(renderKey!==renderedScore||!staff.firstChild){

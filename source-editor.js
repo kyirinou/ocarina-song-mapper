@@ -11,6 +11,7 @@ function rememberEdit(){
   const next=captureEdit();
   if(lastScore&&JSON.stringify({...lastScore,position:0})!==JSON.stringify({...next,position:0})){
     historyPast.push(lastScore);historyFuture.length=0;
+    addScoreActivity('Edited score');
   }
   lastScore=next;updateHistoryButtons();drawTimeline();
 }
@@ -21,6 +22,7 @@ function restoreEdit(from,to){
   const state=from.pop();
   score.load(state);find("meter").value=score.meter;find("score-key").value=score.key;find("editor-tempo").value=score.tempo;
   lastScore=captureEdit();draftChanged=true;
+  addScoreActivity(from===historyPast?'Undid edit':'Redid edit');
   refreshSong(state.position);updateHistoryButtons();drawTimeline();
   if(!find('score').hidden)showScore(false);
 }

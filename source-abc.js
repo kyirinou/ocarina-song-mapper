@@ -85,6 +85,7 @@ if(!project.notes.length||!validProject(project))throw Error('Use valid note nam
 if(recording){report('Finish recording before importing a song.');return;}
 if(!canReplace())return;
 loadProject(project);draftChanged=true;openPage('editor');
+if(editorView!=='staff')switchEditorView('staff');
 if(parsed.importedIntervals?.some(n=>n>0)){
 showScore();
 let time=0;

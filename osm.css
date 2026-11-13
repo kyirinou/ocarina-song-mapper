@@ -86,7 +86,7 @@ body:has(#oc93-page-home:not([hidden]))>h1{text-align:center;font-size:clamp(2.5
 #oc93-sound-settings::backdrop{background:#17212655}
 #oc93 .upload-hint-wrap{position:relative;display:inline-flex;vertical-align:middle;margin-inline:5px}
 #oc93 .upload-hint{display:grid;place-items:center;width:19px;height:19px;padding:0;border:1px solid currentColor;border-radius:50%;background:transparent;color:var(--viz-accent);font-size:12px;font-weight:700}
-#oc93 .upload-tip{display:none;position:absolute;z-index:5;top:calc(100% + 6px);left:50%;transform:translateX(-50%);width:min(180px,48vw);padding:8px 10px;border-radius:7px;background:var(--viz-text);color:white;font-size:12px;line-height:1.4}
+#oc93 .upload-tip{display:none;position:absolute;z-index:5;top:calc(100% + 6px);left:50%;transform:translateX(-50%);width:min(180px,48vw);padding:8px 10px;border-radius:7px;background:var(--viz-panel);color:var(--viz-text);border:1px solid var(--viz-border);box-shadow:0 3px 10px #0004;font-size:12px;line-height:1.4}
 #oc93 .upload-hint:hover + .upload-tip,#oc93 .upload-hint:focus-visible + .upload-tip,#oc93 .upload-hint-wrap[data-open] .upload-tip{display:block}
 #oc93-sound-settings label{display:block;margin:10px 0}
 #oc93-sound-settings input{width:auto}

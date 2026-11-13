@@ -12,7 +12,7 @@ Ocarina Song Mapper (or OSM for short) is a versitile tool to help you learn and
   Start with a blank score, paste note names such as `A4 - D#5 - C5 - F6`, or import supported ABC, MIDI, or MusicXML. Click a note card to hear it. Edit pitches and durations, insert or reorder notes, or audition replacements with **Swap note**.
 
 - **Work in the score editor.**
-  Switch between Staff and Note sequence. Zoom in, select notes to edit in the inspector, and follow the highlights during playback.
+  Switch between Staff, Tab editor, and Note sequence. Zoom in, select notes to edit in the inspector, and follow the highlights during playback.
 
 - **Edit timing in the piano roll.**
   Open **Window → Piano roll** to add, move, resize, mute, or change the velocity of notes. Drag or resize the floating window, choose which pitch labels to display, and follow playback. Select notes by pitch class, length, or velocity, and adjust timing with snap, swing, and humanize.
@@ -31,13 +31,16 @@ Ocarina Song Mapper (or OSM for short) is a versitile tool to help you learn and
 
 - **Tune your ocarina.** Play a steady note to see its pitch, frequency, how sharp or flat it is, and the matching fingering when it falls within the instrument’s range. Use the live pitch history to see vibrato and the waveform to see the microphone signal.
 
-- **Upload your own ocarina fingering tabs.** Add a clear PNG or an OSM fingering PDF. OSM matches the open and filled holes in PNG diagrams and reads numbered pitch labels in PDFs. Open the detected notes as an editable score or play them in **Practice**. Imported notes start at one beat each.
+- **Upload your own ocarina fingering tabs.** Add a PNG, JPG, or PDF. OSM uses open and covered holes to identify supported fingerings, or reads numbered pitch labels from an OSM PDF. Review the detected pitches before opening them as a score or playing them in **Practice**. If an image layout is unfamiliar, **Teach this layout** lets you label each distinct fingering once. Imported notes start at one beat each.
 
 - **Play back and record rhythm**
 Press Enter to step through a score, or use **Play all** to hear the full rhythm while the notation highlights in sync. Change the playback speed or loop a song. Record the intervals between Enter taps and apply either the exact timing or the edited notation durations.
 
-- **Export music and fingering tabs**
-Download the engraved music score as PDF, ABC, or MusicXML. Supported triplets and tempo changes carry through ABC and MusicXML. Customize the tab title, credit, spacing, and line breaks. Export a fingering PDF with the written rhythm under each diagram, or copy tab codes into [Ocarina Tabs Creator](https://panzi.github.io/ocarina_tabs/).
+- **Edit and play fingering tabs.**
+  Open **Tab editor** beside **Staff** or choose **Edit → Open tab editor**. Change fingerings, spacing, title, and credit, then press **Play** to follow the highlighted diagrams. Save the score once to reopen it from **Recent scores**. Tab drafts then save automatically in the same browser, and changes appear in **Edit history**.
+
+- **Export music and fingering tabs.**
+  Use **File → Export** for ABC, MusicXML, score PDF, or a project backup. Use **Save as PDF** inside the Tab editor for fingering sheets. The Tab editor also exports text, SVG, and PNG.
 
 - **Explore the instrument.**
 The **Playable notes** page has all 21 pitches from A4 to F6 with keyboard shortcuts and fingering diagrams. Use **Settings** to choose a theme, interface font, or ocarina sound. **Help** includes a guided visual tutorial.
@@ -50,7 +53,9 @@ The **Playable notes** page has all 21 pitches from A4 to F6 with keyboard short
 
 ![Floating piano roll with piano keys and timing controls](screenshots/piano-roll.png)
 
-### Note recognition and tuner
+### Tab editor and Note recognition
+
+![Tab editor with editable ocarina fingerings and PDF export](screenshots/tab-editor.png)
 
 ![Manual note recognition with a clickable ocarina fingering chart](screenshots/note-recognition.png)
 
@@ -58,17 +63,19 @@ The **Playable notes** page has all 21 pitches from A4 to F6 with keyboard short
 
 1. Open the published app, or open `index.html` in your browser.
 2. Choose **Make new score**, **Import**, or a saved project under **Recent scores**.
-3. Give your score a title and optional source or author credit, then select **Save score**.
+3. Use **File → Rename** to set a title and optional source or author, then select **Save score**.
+
+To remove a saved score, right-click it in **Recent scores** and choose **Delete**, or open it and choose **File → Delete score**.
 
 For the tuner, Play Along, and Convert sound, open the app over HTTPS and allow microphone access when prompted. The app processes microphone input in the browser.
 
-Saved scores live in the browser profile and site where you created them. To move a score or keep a backup, choose **Export → Project backup**. Restore it through **Import → Import project backup**.
+Saved scores live in the browser profile and site where you created them. To move a score or keep a backup, choose **File → Export → Download project backup**. Restore it through **Import → Import project backup**.
 
 ## Credits and license
 
 Original app by **kiri**. You may use, modify, and share the app for free. If you share a modified version, include a visible credit such as “This is a modified version of Ocarina Song Mapper by kiri.” See [LICENSE](LICENSE) for the terms.
 
-Ocarina Song Mapper is an independent project and is not affiliated with, sponsored by, or endorsed by Ocarina Tabs Creator. The copy-and-paste export uses a format its editor accepts.
+Ocarina Song Mapper is an independent project and is not affiliated with, sponsored by, or endorsed by Ocarina Tabs Creator. The native tab editor uses the credited Ocarina fingering font. Draft edits are separate from the score and can be exported from the tab editor.
 
 The ocarina fingering diagrams are drawn from [Open 12 Hole Ocarina 1](https://github.com/panzi/ocarina_tabs), copyright © 2016 Mathias Panzenböck, licensed under the [SIL Open Font License 1.1](https://openfontlicense.org/open-font-license-official-text/). The same font supplies the fingering outlines in the app and its PDF exports. The bundled font includes its copyright and license notice.
 

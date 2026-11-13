@@ -1,7 +1,27 @@
 const projectStatus=find('project-status'), projectMenu=find('projects'), projectName=find('project-name'), authorInput=find('author');
 const pitchEditor=find('edit-pitch'), beatsEditor=find('edit-beats');
 const storageKey='ocarina-song-mapper-v1';
-let projects=[], projectId=null, draftChanged=false;
+let projects=[], projectId=null, draftChanged=false, scoreActivity=[];
+const maxScoreActivity=30;
+function renderScoreActivity(){
+const list=find('edit-history');
+const tabDraft=readNativeTabDraft(projectId)??initialTabDraft;
+const tabActivity=Array.isArray(tabDraft?.activity)?tabDraft.activity:[];
+const entries=[...scoreActivity,...tabActivity]
+  .filter(entry=>typeof entry?.label==='string'&&typeof entry.at==='string'&&Number.isFinite(Date.parse(entry.at)))
+  .sort((a,b)=>b.at.localeCompare(a.at)).slice(0,maxScoreActivity);
+find('edit-history-empty').hidden=entries.length>0;
+list.replaceChildren(...entries.map(({at,label})=>{
+const item=document.createElement('li'),date=document.createElement('time');
+date.dateTime=at;date.textContent=new Date(at).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});
+item.append(document.createTextNode(label),date);
+return item;
+}));
+}
+function addScoreActivity(label){
+scoreActivity=[...scoreActivity,{label,at:new Date().toISOString()}].slice(-maxScoreActivity);
+renderScoreActivity();
+}
 function report(message){projectStatus.textContent=message;}
 function download(filename,contents){
 if(window.webkit?.messageHandlers?.save){
@@ -36,7 +56,8 @@ function snapshot(){
 return {id:projectId,title:projectName.value.trim()||'Untitled song',author:authorInput.value.trim(),notes:[...score.pitches],
 lengths:[...score.lengths],tempo:score.tempo,tempoMap:score.tempoMap.map(mark=>({...mark})),meter:score.meter,key:score.key,intervals:Array.from(score.intervals,n=>n??null),
 performance:score.events.map(({velocity,muted})=>({velocity,muted})),
-tabs:{layout:tabLayout.value,title:tabTitle.value,author:tabAuthor.value}};
+activity:scoreActivity.slice(),
+tabDraft:readNativeTabDraft(projectId)??initialTabDraft};
 }
 function validProject(project){return ScoreModel.validate(project);}
 function restoreSavedProjects(){
@@ -58,11 +79,56 @@ try{if(!localStorage.getItem(storageKey+'-recovery'))localStorage.setItem(storag
 report('The saved library could not be read. You can restore scores from a project backup.');
 }
 }
-function persist(){
-try{localStorage.setItem(storageKey,JSON.stringify({projects,active:projectId}));return true;}
+function persist(library=projects,active=projectId){
+try{localStorage.setItem(storageKey,JSON.stringify({projects:library,active}));return true;}
 catch{report('Local storage is unavailable. Export the project to save a backup.');return false;}
 }
+const recentScoreMenu=find('recent-score-menu');
+let recentScoreTarget;
+function closeRecentScoreMenu(restoreFocus=false){
+if(recentScoreMenu.hidden)return;
+recentScoreMenu.hidden=true;
+if(restoreFocus)recentScoreTarget?.focus({preventScroll:true});
+recentScoreTarget=null;
+}
+function openRecentScoreMenu(button,project,x,y){
+recentScoreTarget=button;
+recentScoreMenu.hidden=false;
+recentScoreMenu.style.left=Math.max(0,Math.min(x,window.innerWidth-recentScoreMenu.offsetWidth))+'px';
+recentScoreMenu.style.top=Math.max(0,Math.min(y,window.innerHeight-recentScoreMenu.offsetHeight))+'px';
+const remove=find('recent-score-delete');
+remove.onclick=()=>{
+closeRecentScoreMenu(true);
+deleteSavedScore(project);
+};
+remove.focus({preventScroll:true});
+}
+document.addEventListener('pointerdown',event=>{
+if(!recentScoreMenu.contains(event.target))closeRecentScoreMenu();
+});
+document.addEventListener('keydown',event=>{
+if(event.key==='Escape'&&!recentScoreMenu.hidden){
+event.preventDefault();
+closeRecentScoreMenu(true);
+}
+});
+function deleteSavedScore(project){
+const active=project.id===projectId;
+const message='Delete “'+project.title+'” from saved scores?'+(active&&draftChanged?' Unsaved changes will also be discarded.':'');
+if(!window.confirm(message))return false;
+const remaining=projects.filter(saved=>saved.id!==project.id);
+if(!persist(remaining,active?null:projectId))return false;
+projects=remaining;
+try{localStorage.removeItem(nativeTabKey(project.id));}catch{}
+if(active)loadProject(emptyProject());
+else refreshMenu();
+if(currentPage==='editor')openPage('home');
+const list=currentPage==='library'?projectMenu:find('recent-scores');
+(list.querySelector('button')??find(currentPage==='library'?'home':'new')).focus({preventScroll:true});
+report('Deleted '+project.title+'.');
+}
 function refreshMenu(){
+closeRecentScoreMenu();
 const recent=find('recent-scores');
 projectMenu.replaceChildren();
 recent.replaceChildren();
@@ -71,7 +137,8 @@ if(!ordered.length){
 projectMenu.textContent='No saved scores yet.';
 recent.textContent='No saved scores yet.';
 }
-function scoreButton(project){
+function scoreRow(project,isRecent=false){
+const row=document.createElement('div');row.className='osm-library-row';
 const button=document.createElement('button');
 button.type='button';button.className='ctrl osm-score-row';
 const title=document.createElement('strong');title.textContent=project.title;
@@ -83,18 +150,38 @@ if(project.id===projectId){openPage('editor');return;}
 if(!canReplace())return;
 loadProject(project);persist();openPage('editor');
 });
+if(isRecent){
+button.setAttribute('aria-haspopup','menu');
+button.addEventListener('contextmenu',event=>{
+event.preventDefault();
+const bounds=button.getBoundingClientRect();
+openRecentScoreMenu(button,project,event.clientX||bounds.left,event.clientY||bounds.bottom);
+});
+button.addEventListener('keydown',event=>{
+if(event.key!=='ContextMenu'&&!(event.shiftKey&&event.key==='F10'))return;
+event.preventDefault();
+const bounds=button.getBoundingClientRect();
+openRecentScoreMenu(button,project,bounds.left,bounds.bottom);
+});
 return button;
 }
-projectMenu.append(...ordered.map(scoreButton));
-recent.append(...ordered.slice(0,6).map(scoreButton));
+const remove=document.createElement('button');
+remove.type='button';remove.className='ctrl osm-delete-score';remove.textContent='Delete';
+remove.setAttribute('aria-label','Delete '+project.title);
+remove.onclick=()=>deleteSavedScore(project);
+row.append(button,remove);
+return row;
+}
+projectMenu.append(...ordered.map(project=>scoreRow(project)));
+recent.append(...ordered.slice(0,6).map(project=>scoreRow(project,true)));
 }
 let currentPage='home';
 function openPage(page){
 if(currentPage==='practice'&&page!==currentPage){find('practice-metronome').checked=false;stopPracticeClick();}
-if(currentPage!==page){if(currentPage==='editor')rollWindow.close();if(currentPage==='practice-setup')leaveRecognition();pdfRequest++;report('');stopMic('Microphone stopped.');closeNoteMenu();}
+if(currentPage!==page){closeRecentScoreMenu();if(currentPage==='editor')rollWindow.close();if(currentPage==='practice-setup')leaveRecognition();pdfRequest++;report('');stopMic('Microphone stopped.');closeNoteMenu();}
 if(currentPage!==page&&(currentPage==='editor'||currentPage==='palette'))stopSound();
 for(const id of ['home','library','import','palette','editor','help','tuner','practice','practice-setup'])find('page-'+id).hidden=id!==page;
-find('home-nav').hidden=['home','practice-setup','palette','tuner'].includes(page);
+find('home-nav').hidden=['home','practice-setup','palette','tuner','help'].includes(page);
 currentPage=page;
 if(page==='editor')updateWorkspace();
 if(page==='editor'||page==='palette')prepareSound()?.catch(loadError);
@@ -110,11 +197,10 @@ stopStep();stopMelody();for(const id of [...voices.keys()])end(id);
 function refreshSong(index=0){
 find("range-warning").hidden=score.pitches.every(Music.playable);
 renderPads();selectPosition(index);
-playBtn.disabled=!score.events.length;
+updatePlaybackAvailability();
 updatePlayButton(false);
 info.textContent=score.events.length+' notes · '+score.tempo+' BPM'+(score.intervals.some(n=>n!=null)?' · Recorded timing':'');
 bar.style.width='0%';
-syncTabLayout();
 if(currentPage==='editor')updateWorkspace();
 }
 function loadProject(p){
@@ -124,29 +210,56 @@ capturedSound=[];soundNote=null;find('convert-use').disabled=true;
 find('convert-preview').textContent='';soundStatus.textContent='Start the microphone when you’re ready.';
 find('convert-open').open=false;
 projectId=p.id;projectName.value=p.title;authorInput.value=p.author??'';
+scoreActivity=(Array.isArray(p.activity)?p.activity:[])
+  .filter(entry=>typeof entry?.label==='string'&&typeof entry.at==='string'&&Number.isFinite(Date.parse(entry.at)))
+  .slice(-maxScoreActivity);
 score.load(p);find("meter").value=score.meter;find("score-key").value=score.key;
 bpmInput.value=score.tempo;take=[];find('score').hidden=true;
 recordStatus.textContent='Select a starting note, then record and tap Enter in rhythm.';
-draftChanged=false;refreshMenu();syncTabLayout(true);
-if(p.tabs&&typeof p.tabs.layout==='string'&&p.tabs.layout.replace(/\s/g,'')===layoutSequence){
-tabLayout.value=p.tabs.layout;tabTitle.value=p.tabs.title??'';tabAuthor.value=p.tabs.author??'';
-}
+draftChanged=false;refreshMenu();
+initialTabDraft=p.tabDraft??(typeof p.tabs?.layout==='string'?{text:p.tabs.layout,title:p.tabs.title,credit:p.tabs.author}:null);
+nativeTabProject=null;
+renderScoreActivity();
 refreshSong();
 historyPast.length=0;historyFuture.length=0;lastScore=captureEdit();updateHistoryButtons();drawTimeline();find('editor-tempo').value=score.tempo;
 }
 function canReplace(){return !draftChanged||window.confirm('Discard unsaved song changes?');}
 find('save').addEventListener('click',()=>{
 const project=snapshot();
-projects=projects.filter(p=>p.id!==projectId).concat(project);
-projectName.value=project.title;refreshMenu();
-if(persist()){draftChanged=false;report('Saved '+project.title+'.');}
+project.activity=[...project.activity,{label:'Saved score',at:new Date().toISOString()}].slice(-maxScoreActivity);
+const next=projects.filter(saved=>saved.id!==projectId).concat(project);
+if(!persist(next))return;
+projects=next;scoreActivity=project.activity;renderScoreActivity();
+projectName.value=project.title;refreshMenu();updateWorkspace();
+draftChanged=false;report('Saved '+project.title+'.');
 });
-projectName.addEventListener('input',()=>{draftChanged=true;});
-authorInput.addEventListener('input',()=>{draftChanged=true;});
+const renameDialog=find('rename-score');
+let previousTitle,previousAuthor;
+function openRenameScore(){
+previousTitle=projectName.value;previousAuthor=authorInput.value;
+renameDialog.returnValue='';
+renameDialog.showModal();
+}
+renameDialog.addEventListener('close',()=>{
+if(renameDialog.returnValue!=='rename'){
+projectName.value=previousTitle;authorInput.value=previousAuthor;
+return;
+}
+projectName.value=projectName.value.trim()||'Untitled song';
+authorInput.value=authorInput.value.trim();
+if(projectName.value===previousTitle&&authorInput.value===previousAuthor)return;
+draftChanged=true;
+addScoreActivity('Updated title or author');
+updateWorkspace();
+if(!find('score').hidden&&!recording)updateNotation();
+});
 function newId(){return Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);}
+function emptyProject(){
+return {id:newId(),title:'Untitled song',author:'',notes:[],lengths:[],tempo:130,intervals:[]};
+}
 find('new').addEventListener('click',()=>{
 if(!canReplace())return;
-loadProject({id:newId(),title:'Untitled song',author:'',notes:[],lengths:[],tempo:130,intervals:[]});
+loadProject(emptyProject());
 openPage('editor');
 });
 find('backup').addEventListener('click',()=>download('ocarina-project.json',JSON.stringify(snapshot(),null,2)));
@@ -156,7 +269,7 @@ if(!file)return;
 try{
 const project=JSON.parse(await file.text());
 if(!validProject(project))throw Error('This file is not an Ocarina Song Mapper project.');
-if(canReplace()){loadProject({...project,id:newId()});draftChanged=true;openPage('editor');report('Project imported. Click Save project to keep it in the menu.');}
+if(canReplace()){const restored={...project,id:newId()};loadProject(restored);if(typeof restored.tabDraft?.text==='string'){try{localStorage.setItem(nativeTabKey(restored.id),JSON.stringify(restored.tabDraft));}catch{}}draftChanged=true;openPage('editor');report('Project imported. Click Save project to keep it in the menu.');}
 }catch(error){report(error.message);}
 });
 function syncEdit(){
@@ -231,12 +344,3 @@ edited(i,true);
 }
 find('earlier').addEventListener('click',()=>move(-1));
 find('later').addEventListener('click',()=>move(1));
-async function copyField(field,message){
-try{await navigator.clipboard.writeText(field.value);report(message);}
-catch{
-field.focus();field.select();
-if(document.execCommand('copy'))report(message);
-else report('Text selected. Press Command-C to copy.');
-}
-}
-

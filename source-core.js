@@ -202,7 +202,7 @@ playBtn.setAttribute('aria-label',label);
 playBtn.title=label;
 playBtn.dataset.playing=String(playing);
 }
-function stopMelody(){stopRollCursor();highlightScore(-1);showPlaybackFingering(-1);find('score-playback').hidden=true;run++;if(timer!==null)clearTimeout(timer);timer=null;end('melody');updatePlayButton(false)}
+function stopMelody(){clearTabPlayback();stopRollCursor();highlightScore(-1);showPlaybackFingering(-1);find('score-playback').hidden=true;run++;if(timer!==null)clearTimeout(timer);timer=null;end('melody');end('tab-melody');updatePlayButton(false)}
 function scoreDuration(index){
 const event=score.events[index];
 if(event.ms!==null)return event.ms;
@@ -216,19 +216,30 @@ bpm=change.bpm;
 return ms+(end-cursor)*15000/bpm;
 }
 function play(){
-if(!score.events.length)return;
+const fromTabs=editorView==='tabs';
+const tabNotes=fromTabs?nativeTabNotes():[];
+const customTabs=fromTabs&&!tabNotesMatchScore(tabNotes);
+const length=customTabs?tabNotes.length:score.events.length;
+if(!length)return;
 if(micSession?.mode==='convert'){report('Stop sound capture before playing the score.');return;}
 if(recording){report('Finish the timing recording before playing the whole score.');return;}
 stopStep();stopMelody();
+if(fromTabs)prepareTabPlayback();
 if(editorView==='staff')drawStaff();
 find('score-playback').hidden=false;
 const token=run;let idx=0;updatePlayButton(true);
 function next(){
 if(token!==run)return;
-if(idx>=score.events.length){if(loop)idx=0;else{stopMelody();info.textContent='Melody complete · '+score.events.length+' notes';return}}
-const i=idx,duration=scoreDuration(i)/(+speed.value/100);
-startRollCursor(i,duration);start('melody',i);highlightScore(i);showPlaybackFingering(i);bar.style.width=((i+1)/score.events.length*100)+'%';idx++;
-timer=setTimeout(()=>{end('melody');timer=setTimeout(next,duration*.1)},duration*.9);
+if(idx>=length){if(loop)idx=0;else{stopMelody();info.textContent='Melody complete · '+length+' notes';return}}
+const i=idx++,duration=(customTabs?60000/score.tempo:scoreDuration(i))/(+speed.value/100);
+if(customTabs){
+start('tab-melody',-1,tabNotes[i]);
+}else{
+startRollCursor(i,duration);start('melody',i);highlightScore(i);showPlaybackFingering(i);
+}
+highlightTabPlayback(i);
+bar.style.width=(idx/length*100)+'%';
+timer=setTimeout(()=>{end(customTabs?'tab-melody':'melody');timer=setTimeout(next,duration*.1)},duration*.9);
 }
 next();
 }
