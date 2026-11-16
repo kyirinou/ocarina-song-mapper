@@ -498,3 +498,12 @@ body:has(#oc93-page-home:not([hidden])) { max-width:840px; }
 #oc93 .osm-tab-playback pre { margin:0; padding:8px; width:max-content; }
 #oc93 .osm-tab-playback span.is-playing { background:#e0eeff; outline:2px solid #1454b5; outline-offset:-2px; }
 @media(max-width:530px){#oc93 #oc93-export-options { position:static; min-width:0; box-shadow:none; }}
+
+#oc93 .recognition-statistics p { color:var(--viz-muted); font-size:12px; }
+#oc93-recognition-pitch-stats { margin:10px 0 0; padding:0; list-style:none; }
+#oc93-recognition-pitch-stats li { display:grid; grid-template-columns:3em minmax(0,1fr) minmax(6em,auto); align-items:center; gap:10px; padding:5px 0; border-bottom:1px solid var(--viz-border); font-size:12px; }
+#oc93-recognition-pitch-stats meter { width:100%; height:13px; accent-color:var(--viz-accent); }
+#oc93-recognition-pitch-stats meter::-webkit-meter-bar { background:var(--viz-panel); border:1px solid var(--viz-border); border-radius:2px; }
+#oc93-recognition-pitch-stats meter::-webkit-meter-optimum-value { background:var(--viz-accent); }
+#oc93-recognition-pitch-stats meter::-moz-meter-bar { background:var(--viz-accent); }
+#oc93-recognition-pitch-stats li > :last-child { text-align:right; color:var(--viz-muted); font-variant-numeric:tabular-nums; }

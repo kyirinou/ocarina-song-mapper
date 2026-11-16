@@ -201,7 +201,7 @@ const tutorialSteps=[
   "practice-setup",
   "#oc93-practice-recognition",
   "Note recognition",
-  "Free mode opens with a blank fingering chart. Tap holes and submit, or use Reveal to see the answer. Choose Use microphone to answer by playing. Manual input returns to the chart. Use the speaker to hear the target and Choose pitches to set your pool. In Flashcards, rate your recall to schedule your next FSRS review."
+  "Free mode opens with a blank fingering chart. Tap holes and submit, or use Reveal to see the answer. Choose Use microphone to answer by playing. Manual input returns to the chart. Use the speaker to hear the target and Choose pitches to set your pool. In Flashcards, rate your recall to schedule your next FSRS review. Open Statistics for accuracy by pitch. Your sessions appear in Recent practice."
  ],
  [
   "Practice",
@@ -333,15 +333,7 @@ let practiceMode=null;
 function choosePractice(mode){
 if(practiceMode==='recognition'&&mode!=='recognition')leaveRecognition();
 if(mode==='recognition')setRecognitionMode(false);
-if(mode===null){
-const list=find('practice-history');list.replaceChildren();
-let history=[];try{history=JSON.parse(localStorage.getItem('osm-practice-history')||'[]');}catch{}
-for(const session of Array.isArray(history)&&history.length?history:[null]){
-const item=document.createElement('li');
-item.textContent=session?new Date(session.date).toLocaleDateString()+' · '+session.matched+'/'+session.notes+' matched'+(session.meanTiming===null?'':' · '+session.meanTiming+' ms mean timing error'):'No completed sessions yet.';
-list.append(item);
-}
-}
+if(mode===null)renderPracticeHistory();
 practiceMode=mode;pdfRequest++;find('reference-hint').hidden=true;
 find('practice-options').hidden=mode!==null;
 find('practice-mode-back').hidden=mode===null;

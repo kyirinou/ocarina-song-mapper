@@ -126,6 +126,7 @@ function showRecognitionInput(microphone){
 }
 
 function leaveRecognition(){
+  recognitionSession=null;
   closeHoleMenu();
   clearTimeout(recognitionTimer);recognitionTimer=null;
   if(micSession?.mode==='recognition')stopMic();
@@ -243,7 +244,12 @@ find('recognition-all').onclick=()=>{recognitionPitches.forEach(pitch=>recogniti
 find('recognition-clear').onclick=()=>{recognitionPool.clear();updateRecognitionPool();};
 find('recognition-free').onclick=()=>setRecognitionMode(false);
 find('recognition-flash').onclick=openRecognitionFlashcards;
-find('recognition-submit').onclick=()=>answerRecognition(recognitionMask===fingeringMasks[recognitionPitch-69]);
+find('recognition-submit').onclick=()=>{
+  if(!canEditRecognitionHoles())return;
+  const correct=recognitionMask===fingeringMasks[recognitionPitch-69];
+  recordRecognitionAttempt(recognitionPitch,correct,recognitionFlash);
+  answerRecognition(correct);
+};
 recognitionReveal.onclick=()=>{
   if(micSession?.mode==='recognition'||recognitionAnswered||recognitionPitch===null)return;
   if(recognitionFlash){answerRecognition(false);return;}
@@ -256,12 +262,20 @@ find('recognition-hear').onclick=()=>{
   previewPitch(recognitionPitch);
 };
 find('recognition-stop').onclick=()=>stopMic('');
-find('recognition-start').onclick=()=>listenMic('recognition',(midi,frequency,cents)=>{
-  if(recognitionNeedsRelease){
-    if(midi!==recognitionPitch&&!voices.has('step'))recognitionNeedsRelease=false;
-    return;
-  }
-  if(midi!==null&&midi===recognitionPitch&&Math.abs(cents)<=45)answerRecognition(true);
-});
+find('recognition-start').onclick=()=>{
+  let lastAttempt=null;
+  listenMic('recognition',(midi,frequency,cents)=>{
+    if(recognitionNeedsRelease){
+      if(midi!==recognitionPitch&&!voices.has('step'))recognitionNeedsRelease=false;
+      return;
+    }
+    if(midi===null){lastAttempt=null;return;}
+    if(midi===lastAttempt||recognitionAnswered||recognitionPitch===null||Math.abs(cents)>45)return;
+    lastAttempt=midi;
+    const correct=midi===recognitionPitch;
+    recordRecognitionAttempt(recognitionPitch,correct,recognitionFlash);
+    if(correct)answerRecognition(true);
+  });
+};
 find('practice-home').onclick=()=>openPage('home');
 updateRecognitionPool();

@@ -1603,6 +1603,93 @@ draftChanged=true;openPage('editor');report('Imported '+take.notes.length+' note
 
 
 
+const recognitionStatsKey='osm-recognition-statistics-v1';
+
+function readPracticeData(key){
+  try{return JSON.parse(localStorage.getItem(key));}catch{return null;}
+}
+
+const savedRecognitionStats=readPracticeData(recognitionStatsKey);
+const recognitionTotals=savedRecognitionStats?.totals??{};
+const recognitionSessions=Array.isArray(savedRecognitionStats?.sessions)?savedRecognitionStats.sessions:[];
+let recognitionSession=null;
+
+function accuracyPercent(correct,attempts){
+  return Math.round(100*correct/attempts);
+}
+
+function renderPracticeHistory(){
+  const stored=readPracticeData('osm-practice-history');
+  const sessions=[...(Array.isArray(stored)?stored:[]),...recognitionSessions]
+    .filter(session=>session&&Number.isFinite(Date.parse(session.date)))
+    .sort((a,b)=>b.date.localeCompare(a.date)).slice(0,30);
+  const list=find('practice-history');
+  list.replaceChildren();
+  if(!sessions.length){
+    const item=document.createElement('li');
+    item.textContent='No completed sessions yet.';
+    list.append(item);
+  }
+  for(const session of sessions){
+    const item=document.createElement('li');
+    const date=new Date(session.date).toLocaleDateString();
+    if(session.mode==='recognition'){
+      item.textContent=date+' · Note recognition ('+session.studyMode+') · '+session.correct+'/'+session.attempts+
+        ' correct · '+accuracyPercent(session.correct,session.attempts)+'%';
+    }else{
+      item.textContent=date+' · '+session.matched+'/'+session.notes+' matched'+
+        (session.meanTiming==null?'':' · '+session.meanTiming+' ms mean timing error');
+    }
+    list.append(item);
+  }
+}
+
+const recognitionStatRows=new Map();
+function renderRecognitionStatistics(){
+  let correct=0,attempts=0;
+  for(const [pitch,{bar,result}] of recognitionStatRows){
+    const total=recognitionTotals[pitch];
+    const count=total?.attempts??0,hits=total?.correct??0;
+    correct+=hits;attempts+=count;
+    bar.value=count?hits/count:0;
+    result.textContent=count?accuracyPercent(hits,count)+'% · '+hits+'/'+count:'No attempts';
+  }
+  find('recognition-accuracy').textContent=attempts
+    ?'Overall: '+accuracyPercent(correct,attempts)+'% · '+correct+'/'+attempts+' correct'
+    :'No answers recorded yet.';
+}
+
+function recordRecognitionAttempt(pitch,correct,flash){
+  if(!recognitionSession){
+    recognitionSession={mode:'recognition',studyMode:flash?'Flashcards':'Free mode',attempts:0,correct:0};
+    recognitionSessions.unshift(recognitionSession);
+    recognitionSessions.length=Math.min(recognitionSessions.length,30);
+  }
+  recognitionSession.date=new Date().toISOString();
+  recognitionSession.attempts++;
+  recognitionSession.correct+=Number(correct);
+  const total=recognitionTotals[pitch]??{attempts:0,correct:0};
+  total.attempts++;
+  total.correct+=Number(correct);
+  recognitionTotals[pitch]=total;
+  try{localStorage.setItem(recognitionStatsKey,JSON.stringify({totals:recognitionTotals,sessions:recognitionSessions}));}catch{}
+  renderRecognitionStatistics();
+}
+
+for(let pitch=69;pitch<=89;pitch++){
+  const item=document.createElement('li'),label=document.createElement('span');
+  const bar=document.createElement('meter'),result=document.createElement('span');
+  label.textContent=name(pitch);
+  bar.max=1;
+  bar.setAttribute('aria-label',name(pitch)+' accuracy');
+  result.id='oc93-recognition-stat-'+pitch;
+  bar.setAttribute('aria-describedby',result.id);
+  item.append(label,bar,result);
+  find('recognition-pitch-stats').append(item);
+  recognitionStatRows.set(pitch,{bar,result});
+}
+renderRecognitionStatistics();
+
 const tunerHistory=[];
 const tunerWindowMs=4000;
 const pitchCanvas=find('pitch-history');
@@ -1813,6 +1900,7 @@ function showRecognitionInput(microphone){
 }
 
 function leaveRecognition(){
+  recognitionSession=null;
   closeHoleMenu();
   clearTimeout(recognitionTimer);recognitionTimer=null;
   if(micSession?.mode==='recognition')stopMic();
@@ -1930,7 +2018,12 @@ find('recognition-all').onclick=()=>{recognitionPitches.forEach(pitch=>recogniti
 find('recognition-clear').onclick=()=>{recognitionPool.clear();updateRecognitionPool();};
 find('recognition-free').onclick=()=>setRecognitionMode(false);
 find('recognition-flash').onclick=openRecognitionFlashcards;
-find('recognition-submit').onclick=()=>answerRecognition(recognitionMask===fingeringMasks[recognitionPitch-69]);
+find('recognition-submit').onclick=()=>{
+  if(!canEditRecognitionHoles())return;
+  const correct=recognitionMask===fingeringMasks[recognitionPitch-69];
+  recordRecognitionAttempt(recognitionPitch,correct,recognitionFlash);
+  answerRecognition(correct);
+};
 recognitionReveal.onclick=()=>{
   if(micSession?.mode==='recognition'||recognitionAnswered||recognitionPitch===null)return;
   if(recognitionFlash){answerRecognition(false);return;}
@@ -1943,13 +2036,21 @@ find('recognition-hear').onclick=()=>{
   previewPitch(recognitionPitch);
 };
 find('recognition-stop').onclick=()=>stopMic('');
-find('recognition-start').onclick=()=>listenMic('recognition',(midi,frequency,cents)=>{
-  if(recognitionNeedsRelease){
-    if(midi!==recognitionPitch&&!voices.has('step'))recognitionNeedsRelease=false;
-    return;
-  }
-  if(midi!==null&&midi===recognitionPitch&&Math.abs(cents)<=45)answerRecognition(true);
-});
+find('recognition-start').onclick=()=>{
+  let lastAttempt=null;
+  listenMic('recognition',(midi,frequency,cents)=>{
+    if(recognitionNeedsRelease){
+      if(midi!==recognitionPitch&&!voices.has('step'))recognitionNeedsRelease=false;
+      return;
+    }
+    if(midi===null){lastAttempt=null;return;}
+    if(midi===lastAttempt||recognitionAnswered||recognitionPitch===null||Math.abs(cents)>45)return;
+    lastAttempt=midi;
+    const correct=midi===recognitionPitch;
+    recordRecognitionAttempt(recognitionPitch,correct,recognitionFlash);
+    if(correct)answerRecognition(true);
+  });
+};
 find('practice-home').onclick=()=>openPage('home');
 updateRecognitionPool();
 
@@ -2234,7 +2335,7 @@ const tutorialSteps=[
   "practice-setup",
   "#oc93-practice-recognition",
   "Note recognition",
-  "Free mode opens with a blank fingering chart. Tap holes and submit, or use Reveal to see the answer. Choose Use microphone to answer by playing. Manual input returns to the chart. Use the speaker to hear the target and Choose pitches to set your pool. In Flashcards, rate your recall to schedule your next FSRS review."
+  "Free mode opens with a blank fingering chart. Tap holes and submit, or use Reveal to see the answer. Choose Use microphone to answer by playing. Manual input returns to the chart. Use the speaker to hear the target and Choose pitches to set your pool. In Flashcards, rate your recall to schedule your next FSRS review. Open Statistics for accuracy by pitch. Your sessions appear in Recent practice."
  ],
  [
   "Practice",
@@ -2366,15 +2467,7 @@ let practiceMode=null;
 function choosePractice(mode){
 if(practiceMode==='recognition'&&mode!=='recognition')leaveRecognition();
 if(mode==='recognition')setRecognitionMode(false);
-if(mode===null){
-const list=find('practice-history');list.replaceChildren();
-let history=[];try{history=JSON.parse(localStorage.getItem('osm-practice-history')||'[]');}catch{}
-for(const session of Array.isArray(history)&&history.length?history:[null]){
-const item=document.createElement('li');
-item.textContent=session?new Date(session.date).toLocaleDateString()+' · '+session.matched+'/'+session.notes+' matched'+(session.meanTiming===null?'':' · '+session.meanTiming+' ms mean timing error'):'No completed sessions yet.';
-list.append(item);
-}
-}
+if(mode===null)renderPracticeHistory();
 practiceMode=mode;pdfRequest++;find('reference-hint').hidden=true;
 find('practice-options').hidden=mode!==null;
 find('practice-mode-back').hidden=mode===null;
