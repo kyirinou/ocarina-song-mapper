@@ -201,7 +201,7 @@ const tutorialSteps=[
   "practice-setup",
   "#oc93-practice-recognition",
   "Note recognition",
-  "Free mode opens with a blank fingering chart. Tap holes and submit, or choose Use microphone to answer by playing. Manual input returns to the chart. Use the speaker to hear the target and Choose pitches to set your pool. In Flashcards, rate your recall to schedule your next FSRS review."
+  "Free mode opens with a blank fingering chart. Tap holes and submit, or use Reveal to see the answer. Choose Use microphone to answer by playing. Manual input returns to the chart. Use the speaker to hear the target and Choose pitches to set your pool. In Flashcards, rate your recall to schedule your next FSRS review."
  ],
  [
   "Practice",

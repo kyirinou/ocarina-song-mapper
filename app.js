@@ -1689,6 +1689,7 @@ const recognitionPitches=Array.from({length:21},(_,i)=>69+i);
 const recognitionPool=new Set(recognitionPitches);
 const recognitionTarget=find('recognition-target');
 const recognitionStatus=find('recognition-status');
+const recognitionReveal=find('recognition-reveal');
 const recognitionRatings=find('recognition-ratings');
 const recognitionDeckKey='osm-recognition-fsrs-v1';
 const recognitionButtons=new Map();
@@ -1696,7 +1697,7 @@ let recognitionDeck={};
 try{recognitionDeck=JSON.parse(localStorage.getItem(recognitionDeckKey))||{};}catch{}
 let recognitionPitch=null,recognitionMask=0,recognitionTimer=null;
 let recognitionFlash=false,recognitionAnswered=false,recognitionNeedsRelease=false;
-let recognitionScheduler;
+let recognitionScheduler,recognitionRevealed=false;
 
 function makeHoleDiagram(){
   const svg=makeFinger(69);
@@ -1715,7 +1716,7 @@ const holeControls=[...diagram.querySelectorAll('circle')].map((hole,i)=>{
   hole.setAttribute('role','button');hole.setAttribute('aria-label','Hole '+(i+1));
   hole.tabIndex=0;
   const toggle=()=>{
-    if(recognitionAnswered||recognitionPitch===null)return;
+    if(recognitionAnswered||recognitionRevealed||recognitionPitch===null)return;
     recognitionMask^=1<<i;drawRecognitionHoles();
   };
   hole.onclick=toggle;
@@ -1727,12 +1728,25 @@ const holeControls=[...diagram.querySelectorAll('circle')].map((hole,i)=>{
 find('recognition-diagram').append(diagram);
 
 function drawRecognitionHoles(){
-  holeControls.forEach((hole,i)=>hole.setAttribute('aria-pressed',String(Boolean(recognitionMask&(1<<i)))));
+  const mask=recognitionRevealed?fingeringMasks[recognitionPitch-69]:recognitionMask;
+  holeControls.forEach((hole,i)=>{
+    hole.setAttribute('aria-pressed',String(Boolean(mask&(1<<i))));
+    hole.setAttribute('aria-disabled',String(recognitionAnswered||recognitionRevealed||recognitionPitch===null));
+  });
+}
+
+function setFingeringPreview(revealed){
+  recognitionRevealed=revealed;
+  recognitionReveal.textContent=revealed?'Next':'Reveal';
+  find('recognition-submit').disabled=revealed||recognitionAnswered||recognitionPitch===null;
+  drawRecognitionHoles();
 }
 
 function showRecognitionInput(microphone){
   find('recognition-diagram').hidden=microphone;
   find('recognition-submit').hidden=microphone;
+  recognitionReveal.hidden=microphone;
+  if(microphone&&recognitionRevealed)setFingeringPreview(false);
   find('recognition-start').hidden=microphone;
   find('recognition-stop').hidden=!microphone;
   find('recognition-target').closest('.recognition-card').classList.toggle('recognition-mic',microphone);
@@ -1746,7 +1760,7 @@ function leaveRecognition(){
 
 function nextRecognitionPitch(){
   clearTimeout(recognitionTimer);recognitionTimer=null;
-  recognitionAnswered=false;recognitionMask=0;drawRecognitionHoles();
+  recognitionAnswered=false;recognitionMask=0;
   recognitionTarget.classList.remove('recognition-hit');
   recognitionRatings.hidden=true;recognitionRatings.replaceChildren();
   const pitches=[...recognitionPool];
@@ -1760,7 +1774,9 @@ function nextRecognitionPitch(){
     recognitionPitch=choices[Math.floor(Math.random()*choices.length)]??null;
   }
   recognitionTarget.textContent=recognitionPitch===null?'—':name(recognitionPitch);
-  for(const action of ['hear','submit','reveal'])find('recognition-'+action).disabled=recognitionPitch===null;
+  setFingeringPreview(false);
+  find('recognition-hear').disabled=recognitionPitch===null;
+  recognitionReveal.disabled=recognitionPitch===null;
   find('recognition-start').disabled=recognitionPitch===null||micSession?.mode==='recognition';
   const nextDue=pitches.map(pitch=>Date.parse(recognitionDeck[pitch]?.due)).filter(Number.isFinite).sort((a,b)=>a-b)[0];
   recognitionStatus.textContent=!pitches.length?'Choose at least one pitch.':
@@ -1773,7 +1789,6 @@ function setRecognitionMode(flash){
   recognitionFlash=flash;
   find('recognition-free').setAttribute('aria-pressed',String(!flash));
   find('recognition-flash').setAttribute('aria-pressed',String(flash));
-  find('recognition-reveal').hidden=!flash;
   nextRecognitionPitch();
 }
 
@@ -1789,11 +1804,14 @@ async function openRecognitionFlashcards(){
 }
 
 function answerRecognition(correct){
-  if(recognitionAnswered||recognitionPitch===null)return;
-  if(!recognitionFlash&&!correct){recognitionStatus.textContent='Try again.';return;}
+  if(recognitionAnswered||recognitionRevealed||recognitionPitch===null)return;
+  if(!recognitionFlash&&!correct){recognitionStatus.textContent='Try again!';return;}
   recognitionAnswered=true;
+  recognitionReveal.disabled=true;
+  find('recognition-submit').disabled=true;
+  drawRecognitionHoles();
   recognitionTarget.classList.toggle('recognition-hit',correct);
-  recognitionStatus.textContent=correct?'Correct!':'Correct fingering shown.';
+  recognitionStatus.textContent=correct?'Correct!':'';
   if(!recognitionFlash){
     recognitionTimer=setTimeout(()=>{
       recognitionNeedsRelease=recognitionPool.size===1;
@@ -1851,7 +1869,13 @@ find('recognition-clear').onclick=()=>{recognitionPool.clear();updateRecognition
 find('recognition-free').onclick=()=>setRecognitionMode(false);
 find('recognition-flash').onclick=openRecognitionFlashcards;
 find('recognition-submit').onclick=()=>answerRecognition(recognitionMask===fingeringMasks[recognitionPitch-69]);
-find('recognition-reveal').onclick=()=>answerRecognition(false);
+recognitionReveal.onclick=()=>{
+  if(micSession?.mode==='recognition'||recognitionAnswered||recognitionPitch===null)return;
+  if(recognitionFlash){answerRecognition(false);return;}
+  if(recognitionRevealed){nextRecognitionPitch();return;}
+  setFingeringPreview(true);
+  recognitionStatus.textContent='';
+};
 find('recognition-hear').onclick=()=>{
   recognitionNeedsRelease=true;
   previewPitch(recognitionPitch);
@@ -2148,7 +2172,7 @@ const tutorialSteps=[
   "practice-setup",
   "#oc93-practice-recognition",
   "Note recognition",
-  "Free mode opens with a blank fingering chart. Tap holes and submit, or choose Use microphone to answer by playing. Manual input returns to the chart. Use the speaker to hear the target and Choose pitches to set your pool. In Flashcards, rate your recall to schedule your next FSRS review."
+  "Free mode opens with a blank fingering chart. Tap holes and submit, or use Reveal to see the answer. Choose Use microphone to answer by playing. Manual input returns to the chart. Use the speaker to hear the target and Choose pitches to set your pool. In Flashcards, rate your recall to schedule your next FSRS review."
  ],
  [
   "Practice",
