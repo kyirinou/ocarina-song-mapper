@@ -436,6 +436,9 @@ html[data-theme=light] #oc93 :is(.osm-start-nav .ctrl,.osm-editor-header .ctrl,.
 #oc93-recognition-diagram circle { fill:var(--viz-card); stroke:var(--viz-muted); stroke-width:7; cursor:pointer; }
 #oc93-recognition-diagram circle[aria-pressed=true] { fill:var(--viz-text); }
 #oc93-recognition-diagram circle:focus-visible { stroke:var(--viz-accent); outline:none; }
+#oc93 .osm-hole-menu { position:fixed; z-index:20; padding:4px; background:var(--viz-card); border:1px solid var(--viz-border); border-radius:4px; box-shadow:0 5px 14px #0005; }
+#oc93 .osm-hole-menu .ctrl { display:block; min-width:90px; width:100%; text-align:left; background:transparent; }
+#oc93 .osm-hole-menu .ctrl:hover,#oc93 .osm-hole-menu .ctrl:focus-visible { background:var(--viz-accent-bg); }
 #oc93-recognition-status { min-height:1.4em; }
 
 #oc93 #oc93-recognition-hear svg { display:block; }

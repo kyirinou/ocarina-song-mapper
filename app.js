@@ -1691,6 +1691,8 @@ const recognitionTarget=find('recognition-target');
 const recognitionStatus=find('recognition-status');
 const recognitionReveal=find('recognition-reveal');
 const recognitionRatings=find('recognition-ratings');
+const holeDiagram=find('recognition-diagram');
+const holeMenu=find('recognition-hole-menu');
 const recognitionDeckKey='osm-recognition-fsrs-v1';
 const recognitionButtons=new Map();
 let recognitionDeck={};
@@ -1716,7 +1718,7 @@ const holeControls=[...diagram.querySelectorAll('circle')].map((hole,i)=>{
   hole.setAttribute('role','button');hole.setAttribute('aria-label','Hole '+(i+1));
   hole.tabIndex=0;
   const toggle=()=>{
-    if(recognitionAnswered||recognitionRevealed||recognitionPitch===null)return;
+    if(!canEditRecognitionHoles())return;
     recognitionMask^=1<<i;drawRecognitionHoles();
   };
   hole.onclick=toggle;
@@ -1725,7 +1727,64 @@ const holeControls=[...diagram.querySelectorAll('circle')].map((hole,i)=>{
   };
   return hole;
 });
-find('recognition-diagram').append(diagram);
+holeDiagram.append(diagram);
+
+function canEditRecognitionHoles(){
+  return !holeDiagram.hidden&&!recognitionAnswered&&!recognitionRevealed&&recognitionPitch!==null;
+}
+
+const fillHoles=find('recognition-fill-holes'),clearHoles=find('recognition-clear-holes');
+let holeMenuTrigger;
+function closeHoleMenu(restoreFocus=false){
+  if(holeMenu.hidden)return;
+  holeMenu.hidden=true;
+  if(restoreFocus)holeMenuTrigger?.focus({preventScroll:true});
+  holeMenuTrigger=null;
+}
+
+function openHoleMenu(event,x,y){
+  event.preventDefault();
+  if(!canEditRecognitionHoles())return;
+  holeMenuTrigger=holeControls.includes(event.target)?event.target:holeControls[0];
+  holeMenu.hidden=false;
+  holeMenu.style.left=Math.min(x,Math.max(0,window.innerWidth-holeMenu.offsetWidth))+'px';
+  holeMenu.style.top=Math.min(y,Math.max(0,window.innerHeight-holeMenu.offsetHeight))+'px';
+  fillHoles.focus({preventScroll:true});
+}
+
+diagram.addEventListener('contextmenu',event=>{
+  const bounds=event.target.getBoundingClientRect();
+  openHoleMenu(event,event.clientX||bounds.left,event.clientY||bounds.bottom);
+});
+diagram.addEventListener('keydown',event=>{
+  if(event.key!=='ContextMenu'&&!(event.shiftKey&&event.key==='F10'))return;
+  const bounds=event.target.getBoundingClientRect();
+  openHoleMenu(event,bounds.left,bounds.bottom);
+});
+for(const [button,mask] of [[fillHoles,(1<<holeControls.length)-1],[clearHoles,0]]){
+  button.onclick=()=>{
+    if(canEditRecognitionHoles()){
+      recognitionMask=mask;
+      drawRecognitionHoles();
+    }
+    closeHoleMenu(true);
+  };
+}
+holeMenu.addEventListener('keydown',event=>{
+  if(event.key==='Escape'){
+    event.preventDefault();
+    closeHoleMenu(true);
+  }else if(event.key==='ArrowUp'||event.key==='ArrowDown'){
+    event.preventDefault();
+    (document.activeElement===fillHoles?clearHoles:fillHoles).focus();
+  }
+});
+holeMenu.addEventListener('focusout',event=>{
+  if(!holeMenu.contains(event.relatedTarget))closeHoleMenu();
+});
+document.addEventListener('pointerdown',event=>{
+  if(!holeMenu.contains(event.target))closeHoleMenu();
+});
 
 function drawRecognitionHoles(){
   const mask=recognitionRevealed?fingeringMasks[recognitionPitch-69]:recognitionMask;
@@ -1743,7 +1802,8 @@ function setFingeringPreview(revealed){
 }
 
 function showRecognitionInput(microphone){
-  find('recognition-diagram').hidden=microphone;
+  closeHoleMenu();
+  holeDiagram.hidden=microphone;
   find('recognition-submit').hidden=microphone;
   recognitionReveal.hidden=microphone;
   if(microphone&&recognitionRevealed)setFingeringPreview(false);
@@ -1753,12 +1813,14 @@ function showRecognitionInput(microphone){
 }
 
 function leaveRecognition(){
+  closeHoleMenu();
   clearTimeout(recognitionTimer);recognitionTimer=null;
   if(micSession?.mode==='recognition')stopMic();
   stopStep();
 }
 
 function nextRecognitionPitch(){
+  closeHoleMenu();
   clearTimeout(recognitionTimer);recognitionTimer=null;
   recognitionAnswered=false;recognitionMask=0;
   recognitionTarget.classList.remove('recognition-hit');

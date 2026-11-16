@@ -266,8 +266,8 @@ SOFTWARE.
 -->
 
 
-<link rel="stylesheet" href="osm.css?v=recognition-labels">
-<link rel="stylesheet" href="workspace.css?v=recognition-labels">
+<link rel="stylesheet" href="osm.css?v=recognition-hole-menu">
+<link rel="stylesheet" href="workspace.css?v=recognition-hole-menu">
 </head>
 <body>
 
@@ -411,10 +411,14 @@ SOFTWARE.
 <label>Upload project backup <input id="oc93-practice-file" type="file" accept=".json"></label>
 </div>
 <div id="oc93-practice-recognition" class="osm-panel" hidden>
-<h3>Note recognition <span class="upload-hint-wrap recognition-hint"><button type="button" class="upload-hint" aria-label="Fingering instructions" aria-describedby="oc93-recognition-hint">?</button><span class="upload-tip" id="oc93-recognition-hint" role="tooltip">Tap on the holes to fill them in for the note on the screen.</span></span></h3>
+<h3>Note recognition <span class="upload-hint-wrap recognition-hint"><button type="button" class="upload-hint" aria-label="Fingering instructions" aria-describedby="oc93-recognition-hint">?</button><span class="upload-tip" id="oc93-recognition-hint" role="tooltip">Tap the holes to match the note on screen. Right-click the ocarina to fill or clear all holes.</span></span></h3>
 <div class="toolbar" aria-label="Study mode"><button class="ctrl" id="oc93-recognition-free" aria-pressed="true">Free mode</button><button class="ctrl" id="oc93-recognition-flash" aria-pressed="false">Flashcards</button></div>
 <div class="recognition-card"><div class="recognition-prompt"><output id="oc93-recognition-target" aria-live="polite" aria-label="Target pitch">—</output><button class="ctrl" id="oc93-recognition-hear" aria-label="Hear target pitch" title="Hear target pitch"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4zM15 9a4 4 0 0 1 0 6m3-9a8 8 0 0 1 0 12"/></svg></button></div>
 <div id="oc93-recognition-diagram"></div>
+<div id="oc93-recognition-hole-menu" class="osm-hole-menu" role="menu" aria-label="Ocarina holes" hidden>
+<button class="ctrl" type="button" role="menuitem" id="oc93-recognition-fill-holes">Fill</button>
+<button class="ctrl" type="button" role="menuitem" id="oc93-recognition-clear-holes">Clear</button>
+</div>
 <div class="toolbar"><button class="ctrl" id="oc93-recognition-reveal">Reveal</button><button class="ctrl primary" id="oc93-recognition-submit">Submit</button><button class="ctrl" id="oc93-recognition-start">Use microphone</button><button class="ctrl" id="oc93-recognition-stop" disabled hidden>Manual input</button></div>
 <p id="oc93-recognition-status" role="status"></p>
 <div class="toolbar" id="oc93-recognition-ratings" hidden></div></div>
@@ -703,7 +707,7 @@ SOFTWARE.
 </section>
 </div>
 
-<script defer src="source-fingering-data.js?v=recognition-labels"></script>
-<script defer src="app.js?v=recognition-labels"></script>
+<script defer src="source-fingering-data.js?v=recognition-hole-menu"></script>
+<script defer src="app.js?v=recognition-hole-menu"></script>
 </body>
 </html>
