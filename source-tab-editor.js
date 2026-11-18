@@ -94,6 +94,7 @@ syncTabPlaybackScroll();
 }
 }
 function clearTabPlayback(){
+if(heldStepKey&&editorView==='tabs')stopStep();
 highlightTabPlayback(-1);
 tabPlaybackCells=[];
 tabPlayback.hidden=true;
@@ -219,14 +220,14 @@ pdf.save(nativeTabFilename()+'.pdf');
 finally{button.disabled=false;}
 };
 
-function stepNativeTab(direction){
+function stepNativeTab(direction,key){
 const notes=nativeTabNotes();
 if(!notes.length)return;
 if(melody)stopMelody();
 if(tabPlayback.hidden)prepareTabPlayback();
 tabStepIndex=Math.max(0,Math.min(notes.length-1,tabStepIndex+direction));
 highlightTabPlayback(tabStepIndex);
-previewPitch(notes[tabStepIndex]);
+previewPitch(notes[tabStepIndex],key);
 }
 nativeTabText.addEventListener('pointerdown',()=>{
 if(!melody&&nativeTabText.readOnly)clearTabPlayback();

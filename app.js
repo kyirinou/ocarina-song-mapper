@@ -53,7 +53,7 @@ e.preventDefault();
 const rect=b.getBoundingClientRect();
 openNoteMenu(i,e.clientX||rect.left,e.clientY||rect.bottom);
 });
-b.addEventListener('click',e=>{if(e.detail===0){selectPosition(i,e);showPlaybackFingering(i);stopStep();start('step',i);stepTimer=setTimeout(stopStep,320)}});
+b.addEventListener('click',e=>{if(e.detail===0){selectPosition(i,e);showPlaybackFingering(i);playStep(i)}});
 b.addEventListener('pointerdown',e=>{if(e.button!==0)return;e.preventDefault();selectPosition(i,e);showPlaybackFingering(i);b.focus({preventScroll:true});b.setPointerCapture(e.pointerId);start('pointer-'+i,i)});
 b.addEventListener('pointerup',()=>end('pointer-'+i));b.addEventListener('pointercancel',()=>end('pointer-'+i));b.addEventListener('lostpointercapture',()=>end('pointer-'+i));
 }
@@ -92,9 +92,15 @@ highlightWorkspace();
 updateRollSelection();
 }
 const display=root.querySelector('#oc93-now'),info=root.querySelector('#oc93-info'),bar=root.querySelector('#oc93-progress'),playBtn=root.querySelector('#oc93-play'),speed=root.querySelector('#oc93-speed');
-let stepTimer=null;
+let stepTimer=null, heldStepKey=null, stepVersion=0;
 function stopStep(){
-clearTimeout(stepTimer);stepTimer=null;end("step");
+clearTimeout(stepTimer);stepTimer=null;heldStepKey=null;stepVersion++;end('step');
+}
+function playStep(index,key=null,pitch=score.events[index]?.pitch){
+stopStep();
+heldStepKey=key;
+start('step',index,pitch);
+if(key===null)stepTimer=setTimeout(stopStep,320);
 }
 let ctx=null,voices=new Map(),run=0,timer=null,loop=false;
 
@@ -148,10 +154,11 @@ function start(id,idx,m=score.events[idx]?.pitch){
 if(m==null||(id==='melody'&&score.events[idx]?.muted))return;
 const pending=prepareSound();
 if(pending){
-const selected=soundChoice, sequence=run;
+const selected=soundChoice, sequence=run, step=stepVersion;
 audio();
 pending.then(()=>{
 if(selected!==soundChoice||sequence!==run||id.startsWith('pointer-'))return;
+if(id==='step'&&step!==stepVersion)return;
 if((id==='melody'||id==='tab-melody')&&(!melody||melody.paused||performance.now()-melody.started+melody.elapsed>=melody.duration*.9))return;
 start(id,idx,m);
 }).catch(loadError);
@@ -296,8 +303,14 @@ display.textContent='—';info.textContent='Stopped';bar.style.width='0%';
 root.querySelector('#oc93-loop').addEventListener('click',e=>{loop=!loop;e.currentTarget.textContent='↻ Loop: '+(loop?'On':'Off')});
 speed.addEventListener('input',()=>root.querySelector('#oc93-speedlabel').textContent=speed.value+'%');
 function editable(el){return el&&(/INPUT|TEXTAREA|SELECT/.test(el.tagName)||el.isContentEditable)}
+document.addEventListener('keyup',e=>{
+if(e.code!==heldStepKey)return;
+e.preventDefault();stopStep();
+},true);
 document.addEventListener('keydown',e=>{
-if(e.repeat||e.ctrlKey||e.metaKey||e.altKey||tutorial.open||find('scan-review').open||find('score-preview').open)return;
+if(e.repeat){if(e.code===heldStepKey)e.preventDefault();return;}
+if(e.ctrlKey||e.metaKey||e.altKey||tutorial.open||find('scan-review').open||find('score-preview').open)return;
+const enter=e.code==='Enter'||e.code==='NumpadEnter';
 if(editable(e.target)&&!(e.target===nativeTabText&&nativeTabText.readOnly))return;
 if(currentPage==='palette'){
 const index=paletteKeys.indexOf(e.code.startsWith('Key')?e.code.slice(3):'');
@@ -305,10 +318,10 @@ if(index>=0){e.preventDefault();selectFingering(69+index,true);}
 return;
 }
 if(currentPage==='practice'&&practiceUploadedTabs&&!rangeDialog.open&&!e.shiftKey&&!e.defaultPrevented&&
-['Enter','ArrowLeft','ArrowRight'].includes(e.code)&&!e.target?.closest?.('button,a')){
-e.preventDefault();stepUploadedPractice(e.code==='ArrowLeft'?-1:1);return;
+(enter||['ArrowLeft','ArrowRight'].includes(e.code))&&!e.target?.closest?.('button,a')){
+e.preventDefault();stepUploadedPractice(e.code==='ArrowLeft'?-1:1,enter?e.code:null);return;
 }
-if(currentPage==='practice'&&!rangeDialog.open&&e.code==='Enter'&&!e.shiftKey&&!e.defaultPrevented&&!e.target?.closest?.('button,a')){
+if(currentPage==='practice'&&!rangeDialog.open&&enter&&!e.shiftKey&&!e.defaultPrevented&&!e.target?.closest?.('button,a')){
 e.preventDefault();advancePractice(false);return;
 }
 if(currentPage!=='editor'||micSession?.mode==='convert'||swapDialog.open||!noteMenu.hidden)return;
@@ -316,9 +329,9 @@ if(e.defaultPrevented||e.target?.closest?.('.osm-menubar, #oc93-piano-roll, dial
 if(editorView==='tabs'&&e.code==='Escape'&&!melody&&!tabPlayback.hidden){
 e.preventDefault();clearTabPlayback();return;
 }
-if(editorView==='tabs'&&!recording&&!e.shiftKey&&['Enter','ArrowLeft','ArrowRight'].includes(e.code)){
-if(e.code==='Enter'&&e.target.closest?.('button')&&!e.target.closest('.osm-viewbar'))return;
-e.preventDefault();stepNativeTab(e.code==='ArrowLeft'?-1:1);return;
+if(editorView==='tabs'&&!recording&&!e.shiftKey&&(enter||['ArrowLeft','ArrowRight'].includes(e.code))){
+if(enter&&e.target.closest?.('button')&&!e.target.closest('.osm-viewbar'))return;
+e.preventDefault();stepNativeTab(e.code==='ArrowLeft'?-1:1,enter?e.code:null);return;
 }
 if((e.code==='Delete'||e.code==='Backspace')&&e.target?.closest('#oc93-sequence .note')){
 e.preventDefault();removeSelected();pads[position]?.focus({preventScroll:true});return;
@@ -328,15 +341,13 @@ e.preventDefault();
 selectPosition(position+(e.code==='ArrowLeft'||e.code==='ArrowUp'?-1:1));
 return;
 }
-if(e.code==='Enter'&&!e.shiftKey){
+if(enter&&!e.shiftKey){
 e.preventDefault();
 if(!score.events.length||(playedSelection&&position===score.events.length-1))return;
 if(playedSelection)selectPosition(position+1);
-stopMelody();stopStep();
-start('step',position);
+stopMelody();playStep(position,e.code);
 showPlaybackFingering(position);
 recordStep(position);
-stepTimer=setTimeout(stopStep,320);
 pads[position].scrollIntoView({block:'nearest'});
 playedSelection=true;
 return;
@@ -720,7 +731,7 @@ recent.append(...ordered.slice(0,6).map(project=>scoreRow(project,true)));
 }
 let currentPage='home';
 function openPage(page){
-if(currentPage==='practice'&&page!==currentPage){find('practice-metronome').checked=false;stopPracticeClick();}
+if(currentPage==='practice'&&page!==currentPage){stopStep();find('practice-metronome').checked=false;stopPracticeClick();}
 if(currentPage!==page){closeRecentScoreMenu();if(currentPage==='editor')rollWindow.close();if(currentPage==='practice-setup')leaveRecognition();pdfRequest++;report('');stopMic('Microphone stopped.');closeNoteMenu();}
 if(currentPage!==page&&(currentPage==='editor'||currentPage==='palette'))stopSound();
 for(const id of ['home','library','import','palette','editor','help','tuner','practice','practice-setup'])find('page-'+id).hidden=id!==page;
@@ -829,8 +840,8 @@ find('earlier').disabled=!hasNote||position===0;
 find('later').disabled=!hasNote||position===score.events.length-1;
 find('remove').disabled=!hasNote;find('swap-note').disabled=!hasNote;
 }
-function previewPitch(m){
-stopStep();start('step',-1,m);stepTimer=setTimeout(stopStep,320);
+function previewPitch(m,key=null){
+playStep(-1,key,m);
 }
 const paletteKeys='QWERTYUIOPASDFGHJKLZXCVBNM'.slice(0,21).split('');
 const paletteButtons=[];
@@ -1187,6 +1198,7 @@ syncTabPlaybackScroll();
 }
 }
 function clearTabPlayback(){
+if(heldStepKey&&editorView==='tabs')stopStep();
 highlightTabPlayback(-1);
 tabPlaybackCells=[];
 tabPlayback.hidden=true;
@@ -1312,14 +1324,14 @@ pdf.save(nativeTabFilename()+'.pdf');
 finally{button.disabled=false;}
 };
 
-function stepNativeTab(direction){
+function stepNativeTab(direction,key){
 const notes=nativeTabNotes();
 if(!notes.length)return;
 if(melody)stopMelody();
 if(tabPlayback.hidden)prepareTabPlayback();
 tabStepIndex=Math.max(0,Math.min(notes.length-1,tabStepIndex+direction));
 highlightTabPlayback(tabStepIndex);
-previewPitch(notes[tabStepIndex]);
+previewPitch(notes[tabStepIndex],key);
 }
 nativeTabText.addEventListener('pointerdown',()=>{
 if(!melody&&nativeTabText.readOnly)clearTabPlayback();
@@ -1613,6 +1625,7 @@ if(document.hidden){find('practice-metronome').checked=false;stopPracticeClick()
 });
 let practiceUploadedTabs=false,practiceTabIndex=-1;
 function restartPractice(){
+if(heldStepKey)stopStep();
 practiceTabIndex=-1;
 practiceCorrect=0;practiceAttempts=0;resetPracticeTiming();updatePracticeFeedback();
 practiceIndex=0;
@@ -1635,6 +1648,7 @@ practiceReturn=back;
 if(!pitches.length){report('Add notes before starting Play Along.');return;}
 practiceUploadedTabs=uploadedTabs;
 openPage('practice');
+if(uploadedTabs)prepareSound()?.catch(loadError);
 find('practice-back').textContent=back==='editor'?'Back to Score Editor':'Back to Practice';
 fullPracticeNotes=[];fullPracticeDurations=[];
 pitches.forEach((pitch,i)=>{
@@ -1685,7 +1699,7 @@ function updatePracticeFeedback(message=''){
 const stats=practiceCorrect+' / '+practiceNotes.length+' matched';
 find('practice-feedback').textContent=stats+(practiceAttempts?' · '+Math.round(100*practiceCorrect/practiceAttempts)+'% pitch accuracy':'')+(message?' · '+message:'');
 }
-function stepUploadedPractice(direction){
+function stepUploadedPractice(direction,key){
 if(!practiceNotes.length)return;
 if(micSession?.mode==='practice')stopMic();
 practiceCards[practiceIndex]?.classList.remove('practice-next');
@@ -1693,7 +1707,7 @@ practiceTabIndex=Math.max(0,Math.min(practiceNotes.length-1,practiceTabIndex+dir
 practiceIndex=practiceTabIndex;
 practiceCards[practiceIndex].classList.add('practice-next');
 showPracticeFingering();updatePracticeWindow();
-previewPitch(practiceNotes[practiceIndex]);
+previewPitch(practiceNotes[practiceIndex],key);
 }
 function advancePractice(matched){
 const card=practiceCards[practiceIndex];
@@ -2289,7 +2303,7 @@ pads[position]?.focus({preventScroll:true});
 });
 const menuActions={
 swap:openSwap,
-hear:()=>{stopStep();start('step',position);stepTimer=setTimeout(stopStep,320);},
+hear:()=>playStep(position),
 insert:()=>find('insert').click(),
 earlier:()=>move(-1),
 later:()=>move(1),
@@ -2494,7 +2508,7 @@ const tutorialSteps=[
   "editor",
   "#oc93-play",
   "Play a score",
-  "Play all follows the rhythm and updates the large fingering and staff highlights without scrolling the page. Use Stop, Loop, or Playback speed. Press Enter to step through notes manually."
+  "Play all follows the rhythm and updates the large fingering and staff highlights without scrolling the page. Use Stop, Loop, or Playback speed. Press Enter to step through notes manually. Hold Enter to sustain the current note."
  ],
  [
   "Notation and playback",
@@ -2529,7 +2543,7 @@ const tutorialSteps=[
   "practice",
   "#oc93-practice-start",
   "Advance and restart",
-  "Play a matching note or press Enter to advance manually. For uploaded tabs, Enter and the arrow keys highlight and play each note. Pause stops listening. Restart clears progress in the current range. The arrow below the cards expands the default eight-note view."
+  "Play a matching note or press Enter to advance manually. For uploaded tabs, Enter and the arrow keys highlight and play each note. Hold Enter to sustain it. Pause stops listening. Restart clears progress in the current range. The arrow below the cards expands the default eight-note view."
  ],
  [
   "Practice",
@@ -2564,7 +2578,7 @@ const tutorialSteps=[
   "editor",
   "#oc93-tab-creator",
   "Export fingering tabs",
-  "Choose Edit → Open tab editor, or select Tab editor beside Staff. Edit the diagrams, spacing, title, and credit. Press Play to follow the highlighted fingerings, or use Enter and the left or right arrow keys to hear one at a time. Tabs matching the score use its timing. A different tab sequence plays one beat per note. Use File → Preview to watch the staff or tabs follow playback. Pause and press Play to resume. Use Save as PDF for a paginated fingering sheet. Save the score once to find it in Recent scores. Tab drafts save automatically in this browser, and changes appear in Edit history."
+  "Choose Edit → Open tab editor, or select Tab editor beside Staff. Edit the diagrams, spacing, title, and credit. Press Play to follow the highlighted fingerings, or use Enter and the left or right arrow keys to hear one at a time. Hold Enter to sustain a note. Tabs matching the score use its timing. A different tab sequence plays one beat per note. Use File → Preview to watch the staff or tabs follow playback. Pause and press Play to resume. Use Save as PDF for a paginated fingering sheet. Save the score once to find it in Recent scores. Tab drafts save automatically in this browser, and changes appear in Edit history."
  ],
  [
   "Export",
@@ -3599,6 +3613,7 @@ function highlightWorkspace(){
 }
 
 function switchEditorView(view){
+  if(editorView!==view&&heldStepKey)stopStep();
   if(editorView==='tabs'&&view!=='tabs'&&melody?.customTabs)stopMelody();
   editorView=view;
   find('score-desk').hidden=view==='tabs';

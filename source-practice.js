@@ -214,6 +214,7 @@ if(document.hidden){find('practice-metronome').checked=false;stopPracticeClick()
 });
 let practiceUploadedTabs=false,practiceTabIndex=-1;
 function restartPractice(){
+if(heldStepKey)stopStep();
 practiceTabIndex=-1;
 practiceCorrect=0;practiceAttempts=0;resetPracticeTiming();updatePracticeFeedback();
 practiceIndex=0;
@@ -236,6 +237,7 @@ practiceReturn=back;
 if(!pitches.length){report('Add notes before starting Play Along.');return;}
 practiceUploadedTabs=uploadedTabs;
 openPage('practice');
+if(uploadedTabs)prepareSound()?.catch(loadError);
 find('practice-back').textContent=back==='editor'?'Back to Score Editor':'Back to Practice';
 fullPracticeNotes=[];fullPracticeDurations=[];
 pitches.forEach((pitch,i)=>{
@@ -286,7 +288,7 @@ function updatePracticeFeedback(message=''){
 const stats=practiceCorrect+' / '+practiceNotes.length+' matched';
 find('practice-feedback').textContent=stats+(practiceAttempts?' · '+Math.round(100*practiceCorrect/practiceAttempts)+'% pitch accuracy':'')+(message?' · '+message:'');
 }
-function stepUploadedPractice(direction){
+function stepUploadedPractice(direction,key){
 if(!practiceNotes.length)return;
 if(micSession?.mode==='practice')stopMic();
 practiceCards[practiceIndex]?.classList.remove('practice-next');
@@ -294,7 +296,7 @@ practiceTabIndex=Math.max(0,Math.min(practiceNotes.length-1,practiceTabIndex+dir
 practiceIndex=practiceTabIndex;
 practiceCards[practiceIndex].classList.add('practice-next');
 showPracticeFingering();updatePracticeWindow();
-previewPitch(practiceNotes[practiceIndex]);
+previewPitch(practiceNotes[practiceIndex],key);
 }
 function advancePractice(matched){
 const card=practiceCards[practiceIndex];

@@ -53,7 +53,7 @@ pads[position]?.focus({preventScroll:true});
 });
 const menuActions={
 swap:openSwap,
-hear:()=>{stopStep();start('step',position);stepTimer=setTimeout(stopStep,320);},
+hear:()=>playStep(position),
 insert:()=>find('insert').click(),
 earlier:()=>move(-1),
 later:()=>move(1),

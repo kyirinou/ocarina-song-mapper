@@ -30,6 +30,7 @@ function highlightWorkspace(){
 }
 
 function switchEditorView(view){
+  if(editorView!==view&&heldStepKey)stopStep();
   if(editorView==='tabs'&&view!=='tabs'&&melody?.customTabs)stopMelody();
   editorView=view;
   find('score-desk').hidden=view==='tabs';

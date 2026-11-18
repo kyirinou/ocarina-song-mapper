@@ -177,7 +177,7 @@ recent.append(...ordered.slice(0,6).map(project=>scoreRow(project,true)));
 }
 let currentPage='home';
 function openPage(page){
-if(currentPage==='practice'&&page!==currentPage){find('practice-metronome').checked=false;stopPracticeClick();}
+if(currentPage==='practice'&&page!==currentPage){stopStep();find('practice-metronome').checked=false;stopPracticeClick();}
 if(currentPage!==page){closeRecentScoreMenu();if(currentPage==='editor')rollWindow.close();if(currentPage==='practice-setup')leaveRecognition();pdfRequest++;report('');stopMic('Microphone stopped.');closeNoteMenu();}
 if(currentPage!==page&&(currentPage==='editor'||currentPage==='palette'))stopSound();
 for(const id of ['home','library','import','palette','editor','help','tuner','practice','practice-setup'])find('page-'+id).hidden=id!==page;
@@ -286,8 +286,8 @@ find('earlier').disabled=!hasNote||position===0;
 find('later').disabled=!hasNote||position===score.events.length-1;
 find('remove').disabled=!hasNote;find('swap-note').disabled=!hasNote;
 }
-function previewPitch(m){
-stopStep();start('step',-1,m);stepTimer=setTimeout(stopStep,320);
+function previewPitch(m,key=null){
+playStep(-1,key,m);
 }
 const paletteKeys='QWERTYUIOPASDFGHJKLZXCVBNM'.slice(0,21).split('');
 const paletteButtons=[];
