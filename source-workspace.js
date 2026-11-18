@@ -30,7 +30,7 @@ function highlightWorkspace(){
 }
 
 function switchEditorView(view){
-  if(editorView==='tabs'&&view!=='tabs'&&tabPlayback.hidden===false&&scorePlaybackIndex<0)stopMelody();
+  if(editorView==='tabs'&&view!=='tabs'&&melody?.customTabs)stopMelody();
   editorView=view;
   find('score-desk').hidden=view==='tabs';
   for(const button of editorViews){
@@ -95,6 +95,7 @@ menuBar.addEventListener('click',event=>{
   closeEditorMenus();
   summaryButton.focus({preventScroll:true});
   if(command.startsWith('@'))openPage(command.slice(1));
+  else if(command==='score-preview')openScorePreview();
   else if(command==='rename-score')openRenameScore();
   else if(command==='delete-score'){
     const saved=projects.find(project=>project.id===projectId);

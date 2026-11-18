@@ -34,13 +34,13 @@ Ocarina Song Mapper (or OSM for short) is a versitile tool to help you learn and
 - **Upload your own ocarina fingering tabs.** Add a PNG, JPG, or PDF. OSM uses open and covered holes to identify supported fingerings, or reads numbered pitch labels from an OSM PDF. Review the detected pitches before opening them as a score or playing them in **Practice**. If an image layout is unfamiliar, **Teach this layout** lets you label each distinct fingering once. Imported notes start at one beat each.
 
 - **Play back and record rhythm**
-Press Enter to step through a score, or use **Play all** to hear the full rhythm while the notation highlights in sync. Change the playback speed or loop a song. Record the intervals between Enter taps and apply either the exact timing or the edited notation durations.
+Press Enter to step through a score, or use **Play all** to hear the full rhythm while the notation highlights in sync. Change the playback speed, loop a song, or pause and resume. Use **File → Preview** to follow playback on the staff or fingering tabs. Record the intervals between Enter taps and apply either the exact timing or the edited notation durations.
 
 - **Edit and play fingering tabs.**
-  Open **Tab editor** beside **Staff** or choose **Edit → Open tab editor**. Change fingerings, spacing, title, and credit, then press **Play** to follow the highlighted diagrams. Save the score once to reopen it from **Recent scores**. Tab drafts then save automatically in the same browser, and changes appear in **Edit history**.
+  Open **Tab editor** beside **Staff** or choose **Edit → Open tab editor**. Change fingerings, spacing, title, and credit, then press **Play** to follow the highlighted diagrams. Use Enter and the arrow keys to hear individual fingerings, including in uploaded tabs. Save the score once to reopen it from **Recent scores**. Tab drafts then save automatically in the same browser, and changes appear in **Edit history**.
 
 - **Export music and fingering tabs.**
-  Use **File → Export** for ABC, MusicXML, score PDF, or a project backup. Use **Save as PDF** inside the Tab editor for fingering sheets. The Tab editor also exports text, SVG, and PNG.
+  Use **File → Export** for ABC, MusicXML, score PDF, or a project backup. Use **Save as PDF** inside the Tab editor for fingering sheets. The Tab editor also exports text and SVG.
 
 - **Explore the instrument.**
 The **Playable notes** page has all 21 pitches from A4 to F6 with keyboard shortcuts and fingering diagrams. Use **Settings** to choose a theme, interface font, or ocarina sound. **Help** includes a guided visual tutorial.

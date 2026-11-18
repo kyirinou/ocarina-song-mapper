@@ -152,6 +152,7 @@ const selected=soundChoice, sequence=run;
 audio();
 pending.then(()=>{
 if(selected!==soundChoice||sequence!==run||id.startsWith('pointer-'))return;
+if((id==='melody'||id==='tab-melody')&&(!melody||melody.paused||performance.now()-melody.started+melody.elapsed>=melody.duration*.9))return;
 start(id,idx,m);
 }).catch(loadError);
 return;
@@ -197,13 +198,36 @@ const pitch=name(score.events[index].pitch);
 chart.append(makeFinger(score.events[index].pitch));
 chart.setAttribute('aria-label','Fingering for '+pitch);
 }
+let melody=null;
 function updatePlayButton(playing){
-const label=playing?'Playing score':'Play all notes';
+const label=playing?'Playing score':melody?.paused?'Resume playback':'Play all notes';
 playBtn.setAttribute('aria-label',label);
 playBtn.title=label;
 playBtn.dataset.playing=String(playing);
+find('pause').disabled=!playing;
+find('preview-pause').disabled=!playing;
+find('preview-play').setAttribute('aria-label',melody?.paused?'Resume preview':'Play preview');
 }
-function stopMelody(){clearTabPlayback();stopRollCursor();highlightScore(-1);showPlaybackFingering(-1);find('score-playback').hidden=true;run++;if(timer!==null)clearTimeout(timer);timer=null;end('melody');end('tab-melody');updatePlayButton(false)}
+function silenceMelody(){
+run++;
+clearTimeout(timer);timer=null;
+end('melody');end('tab-melody');
+}
+function stopMelody(){
+melody=null;
+silenceMelody();
+clearTabPlayback();stopRollCursor();highlightScore(-1);
+highlightScorePreview(-1);
+showPlaybackFingering(-1);
+find('score-playback').hidden=true;
+updatePlayButton(false);
+}
+function pauseMelody(){
+if(!melody||melody.paused)return;
+melody.elapsed=Math.min(melody.duration,melody.elapsed+performance.now()-melody.started);
+melody.paused=true;
+silenceMelody();pauseRollCursor();updatePlayButton(false);
+}
 function scoreDuration(index){
 const event=score.events[index];
 if(event.ms!==null)return event.ms;
@@ -216,35 +240,54 @@ bpm=change.bpm;
 }
 return ms+(end-cursor)*15000/bpm;
 }
-function play(){
-const fromTabs=editorView==='tabs';
+function play(fromTabs=editorView==='tabs'){
+if(micSession?.mode==='convert'){report('Stop sound capture before playing the score.');return;}
+if(recording){report('Finish the timing recording before playing the whole score.');return;}
+if(melody?.paused&&melody.fromTabs===fromTabs){
+melody.paused=false;updatePlayButton(true);playMelodyNote();return;
+}
 const tabNotes=fromTabs?nativeTabNotes():[];
 const customTabs=fromTabs&&!tabNotesMatchScore(tabNotes);
 const length=customTabs?tabNotes.length:score.events.length;
 if(!length)return;
-if(micSession?.mode==='convert'){report('Stop sound capture before playing the score.');return;}
-if(recording){report('Finish the timing recording before playing the whole score.');return;}
 stopStep();stopMelody();
+melody={fromTabs,tabNotes,customTabs,length,index:0,elapsed:0,paused:false};
 if(fromTabs)prepareTabPlayback();
 if(editorView==='staff')drawStaff();
 find('score-playback').hidden=false;
-const token=run;let idx=0;updatePlayButton(true);
-function next(){
-if(token!==run)return;
-if(idx>=length){if(loop)idx=0;else{stopMelody();info.textContent='Melody complete · '+length+' notes';return}}
-const i=idx++,duration=(customTabs?60000/score.tempo:scoreDuration(i))/(+speed.value/100);
-if(customTabs){
-start('tab-melody',-1,tabNotes[i]);
-}else{
-startRollCursor(i,duration);start('melody',i);highlightScore(i);showPlaybackFingering(i);
+updatePlayButton(true);playMelodyNote();
 }
-highlightTabPlayback(i);
-bar.style.width=(idx/length*100)+'%';
-timer=setTimeout(()=>{end(customTabs?'tab-melody':'melody');timer=setTimeout(next,duration*.1)},duration*.9);
+function playMelodyNote(){
+const {index,customTabs,tabNotes,length,elapsed}=melody;
+const duration=elapsed>0?melody.duration:(customTabs?60000/score.tempo:scoreDuration(index))/(+speed.value/100);
+melody.duration=duration;
+melody.started=performance.now();
+const voice=customTabs?'tab-melody':'melody';
+const token=++run;
+const advance=()=>{
+if(run!==token)return;
+if(index+1===length&&!loop){
+stopMelody();info.textContent='Melody complete · '+length+' notes';return;
 }
-next();
+melody.index=(index+1)%length;melody.elapsed=0;playMelodyNote();
+};
+const gate=duration*.9;
+if(elapsed<gate){
+start(voice,customTabs?-1:index,customTabs?tabNotes[index]:score.events[index].pitch);
+timer=setTimeout(()=>{
+if(run!==token)return;
+end(voice);timer=setTimeout(advance,duration-gate);
+},gate-elapsed);
+}else timer=setTimeout(advance,Math.max(0,duration-elapsed));
+if(!customTabs){
+startRollCursor(index,duration,elapsed);highlightScore(index);showPlaybackFingering(index);
 }
-playBtn.addEventListener('click',play);
+highlightTabPlayback(index);
+highlightScorePreview(index);
+bar.style.width=((index+1)/length*100)+'%';
+}
+playBtn.addEventListener('click',()=>play());
+root.querySelector('#oc93-pause').onclick=pauseMelody;
 root.querySelector('#oc93-score-stop').addEventListener('click',stopMelody);
 root.querySelector('#oc93-stop').addEventListener('click',()=>{
 finishRecording();stopStep();stopMelody();for(const id of [...voices.keys()])end(id);
@@ -254,17 +297,29 @@ root.querySelector('#oc93-loop').addEventListener('click',e=>{loop=!loop;e.curre
 speed.addEventListener('input',()=>root.querySelector('#oc93-speedlabel').textContent=speed.value+'%');
 function editable(el){return el&&(/INPUT|TEXTAREA|SELECT/.test(el.tagName)||el.isContentEditable)}
 document.addEventListener('keydown',e=>{
-if(e.repeat||e.ctrlKey||e.metaKey||e.altKey||editable(e.target)||tutorial.open||find('scan-review').open)return;
+if(e.repeat||e.ctrlKey||e.metaKey||e.altKey||tutorial.open||find('scan-review').open||find('score-preview').open)return;
+if(editable(e.target)&&!(e.target===nativeTabText&&nativeTabText.readOnly))return;
 if(currentPage==='palette'){
 const index=paletteKeys.indexOf(e.code.startsWith('Key')?e.code.slice(3):'');
 if(index>=0){e.preventDefault();selectFingering(69+index,true);}
 return;
 }
+if(currentPage==='practice'&&practiceUploadedTabs&&!rangeDialog.open&&!e.shiftKey&&!e.defaultPrevented&&
+['Enter','ArrowLeft','ArrowRight'].includes(e.code)&&!e.target?.closest?.('button,a')){
+e.preventDefault();stepUploadedPractice(e.code==='ArrowLeft'?-1:1);return;
+}
 if(currentPage==='practice'&&!rangeDialog.open&&e.code==='Enter'&&!e.shiftKey&&!e.defaultPrevented&&!e.target?.closest?.('button,a')){
 e.preventDefault();advancePractice(false);return;
 }
 if(currentPage!=='editor'||micSession?.mode==='convert'||swapDialog.open||!noteMenu.hidden)return;
-if(e.defaultPrevented||e.target?.closest?.('.osm-menubar, #oc93-piano-roll'))return;
+if(e.defaultPrevented||e.target?.closest?.('.osm-menubar, #oc93-piano-roll, dialog'))return;
+if(editorView==='tabs'&&e.code==='Escape'&&!melody&&!tabPlayback.hidden){
+e.preventDefault();clearTabPlayback();return;
+}
+if(editorView==='tabs'&&!recording&&!e.shiftKey&&['Enter','ArrowLeft','ArrowRight'].includes(e.code)){
+if(e.code==='Enter'&&e.target.closest?.('button')&&!e.target.closest('.osm-viewbar'))return;
+e.preventDefault();stepNativeTab(e.code==='ArrowLeft'?-1:1);return;
+}
 if((e.code==='Delete'||e.code==='Backspace')&&e.target?.closest('#oc93-sequence .note')){
 e.preventDefault();removeSelected();pads[position]?.focus({preventScroll:true});return;
 }
@@ -1044,7 +1099,7 @@ const nativeTabCredit=find('native-tab-credit');
 const nativeTabSize=find('native-tab-size');
 const nativeTabStatus=find('native-tab-status');
 let nativeTabProject=null,initialTabDraft=null,nativeTabActivity=[],lastTabEdit=null;
-let tabPlaybackCells=[],tabPlaybackCell=null;
+let tabPlaybackCells=[],tabPlaybackCell=null,tabStepIndex=-1;
 
 function nativeTabKey(id){return 'osm-tab-draft-v1:'+id;}
 function readNativeTabDraft(id){
@@ -1083,6 +1138,7 @@ if(!initialTabDraft&&!nativeTabText.readOnly)nativeTabText.value=defaultTabLayou
 return;
 }
 nativeTabProject=projectId;
+tabStepIndex=-1;
 const draft=readNativeTabDraft(projectId)??initialTabDraft;
 const sequence=score.pitches.map(fingeringCode).join('');
 nativeTabText.value=draft?.text??defaultTabLayout(sequence);
@@ -1138,7 +1194,10 @@ nativeTabText.readOnly=false;
 }
 nativeTabText.addEventListener('scroll',syncTabPlaybackScroll);
 for(const [field,label] of [[nativeTabText,'Edited tab fingerings or layout'],[nativeTabTitle,'Edited tab title'],[nativeTabCredit,'Edited tab author']]){
-field.addEventListener('input',()=>saveNativeTabDraft(label));
+field.addEventListener('input',()=>{
+  if(field===nativeTabText)tabStepIndex=-1;
+  saveNativeTabDraft(label);
+});
 }
 nativeTabSize.onchange=()=>{updateNativeTabStyle();saveNativeTabDraft('Changed tab diagram size');};
 find('native-tab-save-score').onclick=()=>find('save').click();
@@ -1150,11 +1209,13 @@ const button=document.createElement('button');
 button.type='button';button.className='ctrl';button.textContent=label;
 button.addEventListener('pointerdown',event=>event.preventDefault());
 button.onclick=()=>{
-if(nativeTabText.readOnly)return;
+if(melody)return;
+if(nativeTabText.readOnly)clearTabPlayback();
 nativeTabText.focus();
 // Use the browser’s text editing operation so insertions join Undo history.
 if(!document.execCommand('insertText',false,code)){
 nativeTabText.setRangeText(code,nativeTabText.selectionStart,nativeTabText.selectionEnd,'end');
+tabStepIndex=-1;
 saveNativeTabDraft('Edited tab fingerings or layout');
 }
 };
@@ -1166,12 +1227,21 @@ return (nativeTabTitle.value.trim()||'Ocarina tabs').replace(/[\\/:*?"<>|]/g,'-'
 }
 find('native-tab-text-export').onclick=()=>download(nativeTabFilename()+'.txt',nativeTabText.value);
 
-function nativeTabArtwork(){
+function nativeTabRows(text,columns=Infinity){
+return text.split('\n').flatMap(line=>{
+const cells=Array.from(line.replace(/\t/g,'    '));
+if(!cells.length)return [[]];
+const rows=[];
+for(let start=0;start<cells.length;start+=columns)rows.push(cells.slice(start,start+columns));
+return rows;
+});
+}
+function nativeTabArtwork({columns=Infinity,rows,heading=true,indexed=true}={}){
 const draft=nativeTabDraft();
-const rows=draft.text.split('\n').map(row=>Array.from(row.replace(/\t/g,'    ')));
-const size=Number(draft.size),margin=20;
-const width=Math.max(360,margin*2+size*Math.max(...rows.map(row=>row.length)));
-const height=100+rows.length*(size+8);
+rows??=nativeTabRows(draft.text,columns);
+const size=Number(draft.size),margin=heading?20:0,top=heading?72:0;
+const width=Math.max(heading?360:1,margin*2+size*rows.reduce((max,row)=>Math.max(max,row.length),0));
+const height=top+rows.length*(size+8)+(heading?28:0);
 if(width>8000||height>16000)throw Error('Shorten the tab rows or split the draft into smaller sheets.');
 const svg=document.createElementNS(svgNS,'svg');
 svg.setAttribute('xmlns',svgNS);svg.setAttribute('width',width);svg.setAttribute('height',height);
@@ -1180,17 +1250,23 @@ function label(value,x,y,fontSize){
 rhythmShape(svg,'text',{x,y,'font-size':fontSize,'font-family':'sans-serif',fill:'#172126'});
 svg.lastChild.textContent=value;
 }
-label(draft.title,margin,34,22);label(draft.credit,margin,55,13);
+if(heading){label(draft.title,margin,34,22);label(draft.credit,margin,55,13);}
+let index=0;
 rows.forEach((row,line)=>row.forEach((symbol,column)=>{
-const x=margin+column*size,y=72+line*(size+8);
-if(/^[A-U]$/.test(symbol)){
-const glyph=makeFinger(symbol.charCodeAt(0)-65+69);
+const x=margin+column*size,y=top+line*(size+8);
+if(/[A-Ur]/.test(symbol)){
+if(indexed){
+rhythmShape(svg,'rect',{x,y,width:size,height:size,fill:'none','data-tab-index':index});
+}
+index++;
+if(symbol==='r'){label('Rest',x+4,y+size*.66,Math.min(size*.42,18));return;}
+const glyph=makeFinger(nativeTabPitch(symbol));
 glyph.setAttribute('x',x);glyph.setAttribute('y',y);
 glyph.setAttribute('width',size-4);glyph.setAttribute('height',size);
 svg.append(glyph);
-}else if(symbol.trim())label(symbol==='r'?'Rest':symbol,x+4,y+size*.66,Math.min(size*.42,18));
+}else if(symbol.trim())label(symbol,x+4,y+size*.66,Math.min(size*.42,18));
 }));
-return {svg,width,height,data:new XMLSerializer().serializeToString(svg)};
+return {svg,width,height};
 }
 function saveNativeArtwork(blob,extension){
 const url=URL.createObjectURL(blob),link=document.createElement('a');
@@ -1198,37 +1274,128 @@ link.href=url;link.download=nativeTabFilename()+'.'+extension;link.click();
 setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 find('native-tab-svg').onclick=()=>{
-try{saveNativeArtwork(new Blob([nativeTabArtwork().data],{type:'image/svg+xml'}),'svg');}
+try{saveNativeArtwork(new Blob([new XMLSerializer().serializeToString(nativeTabArtwork().svg)],{type:'image/svg+xml'}),'svg');}
 catch(error){nativeTabStatus.textContent=error.message;}
-};
-find('native-tab-png').onclick=async()=>{
-let url;
-try{
-const {data,width,height}=nativeTabArtwork();
-if(width*height>12000000)throw Error('Use SVG or PDF for this large layout.');
-url=URL.createObjectURL(new Blob([data],{type:'image/svg+xml'}));
-const image=new Image();image.src=url;await image.decode();
-const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
-canvas.getContext('2d').drawImage(image,0,0);
-const png=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
-if(!png)throw Error('Could not create PNG.');
-saveNativeArtwork(png,'png');
-}catch(error){nativeTabStatus.textContent=error.message;}
-finally{if(url)URL.revokeObjectURL(url);}
 };
 find('native-tab-pdf').onclick=async()=>{
 const button=find('native-tab-pdf');button.disabled=true;
 try{
-const {svg,width,height}=nativeTabArtwork();
+const draft=nativeTabDraft();
 await loadPDFExport();
 const pdf=new window.jspdf.jsPDF({unit:'pt',format:'a4'});
-const margin=24,pageWidth=pdf.internal.pageSize.getWidth()-2*margin,pageHeight=pdf.internal.pageSize.getHeight()-2*margin;
-const scale=Math.min(1,pageWidth/width,pageHeight/height);
-await pdf.svg(svg,{x:margin,y:margin,width:width*scale,height:height*scale});
+pdf.setProperties({title:draft.title,author:draft.credit,keywords:'osm-tab-draft-v1:'+encodeURIComponent(draft.text)});
+const margin=32,width=pdf.internal.pageSize.getWidth()-2*margin;
+const bottom=pdf.internal.pageSize.getHeight()-margin;
+let y=margin;
+for(const [value,fontSize] of [[draft.title,20],[draft.credit,11]]){
+if(!value.trim())continue;
+pdf.setFontSize(fontSize);
+for(const line of pdf.splitTextToSize(value,width)){
+if(y+fontSize*1.25>bottom){pdf.addPage();y=margin;}
+pdf.text(line,margin,y+fontSize);
+y+=fontSize*1.25;
+}
+y+=6;
+}
+const rowHeight=Number(draft.size)+8;
+const rows=nativeTabRows(draft.text,Math.max(1,Math.floor(width/Number(draft.size))));
+for(let start=0;start<rows.length;){
+if(y+rowHeight>bottom){pdf.addPage();y=margin;}
+const count=Math.floor((bottom-y)/rowHeight);
+const pageRows=rows.slice(start,start+count);
+const art=nativeTabArtwork({rows:pageRows,heading:false,indexed:false});
+await pdf.svg(art.svg,{x:margin,y,width:art.width,height:art.height});
+start+=pageRows.length;y+=art.height;
+}
 pdf.save(nativeTabFilename()+'.pdf');
 }catch(error){nativeTabStatus.textContent=error.message;}
 finally{button.disabled=false;}
 };
+
+function stepNativeTab(direction){
+const notes=nativeTabNotes();
+if(!notes.length)return;
+if(melody)stopMelody();
+if(tabPlayback.hidden)prepareTabPlayback();
+tabStepIndex=Math.max(0,Math.min(notes.length-1,tabStepIndex+direction));
+highlightTabPlayback(tabStepIndex);
+previewPitch(notes[tabStepIndex]);
+}
+nativeTabText.addEventListener('pointerdown',()=>{
+if(!melody&&nativeTabText.readOnly)clearTabPlayback();
+});
+
+const scorePreview=find('score-preview');
+const previewKind=find('preview-kind');
+const previewPaper=find('preview-paper');
+const previewScroll=find('preview-scroll');
+let previewNotes=[],previewActive=[];
+
+function fitScorePreview(){
+if(!scorePreview.open||!previewPaper.firstElementChild)return;
+previewPaper.style.zoom='1';
+const width=previewPaper.scrollWidth,height=previewPaper.scrollHeight;
+previewPaper.style.zoom=String(Math.min(1,(previewScroll.clientWidth-20)/width,
+  Math.max(.42,(previewScroll.clientHeight-20)/height)));
+}
+
+async function drawScorePreview(){
+const tabView=previewKind.value==='tabs';
+const status=find('preview-status'),playButton=find('preview-play');
+previewPaper.replaceChildren();
+previewNotes=[];previewActive=[];
+playButton.disabled=true;
+status.hidden=true;
+find('score-preview-title').textContent=(tabView?nativeTabTitle.value:projectName.value).trim()||'Untitled score';
+try{
+if(tabView){
+const notes=nativeTabNotes();
+if(!notes.length)throw Error('Add fingerings before previewing tabs.');
+const {svg}=nativeTabArtwork({columns:12});
+previewPaper.append(svg);
+svg.querySelectorAll('[data-tab-index]').forEach(node=>{previewNotes.push([node]);});
+}else{
+if(!score.events.length)throw Error('Add notes before previewing the staff.');
+await loadNotation();
+if(!scorePreview.open||previewKind.value!=='staff')return;
+const {abc,glyphIndexes}=engravedScore(scoreEntries(),score.tempo);
+window.ABCJS.renderAbc(previewPaper,abc,{add_classes:true,staffwidth:720,oneSvgPerLine:true});
+previewPaper.querySelectorAll('.abcjs-note,.abcjs-rest').forEach((glyph,i)=>{
+const index=glyphIndexes[i];
+if(index===undefined)return;
+(previewNotes[index]??=[]).push(glyph);
+});
+}
+playButton.disabled=false;
+previewScroll.scrollTop=0;
+fitScorePreview();
+}catch(error){
+status.textContent=error.message;status.hidden=false;
+}
+}
+
+function highlightScorePreview(index){
+if(!scorePreview.open)return;
+for(const node of previewActive)node.classList.remove('playing-note','preview-tab-active');
+previewActive=previewNotes[index]??[];
+for(const node of previewActive)node.classList.add(previewKind.value==='tabs'?'preview-tab-active':'playing-note');
+const active=previewActive.at(-1);
+if(!active)return;
+const target=active.getBoundingClientRect(),view=previewScroll.getBoundingClientRect();
+if(target.bottom>view.bottom-8||target.top<view.top+8)previewScroll.scrollTop+=target.top-view.top-14;
+}
+
+function openScorePreview(){
+stopMelody();openNativeTabEditor();
+previewKind.value=editorView==='tabs'?'tabs':'staff';
+scorePreview.showModal();drawScorePreview();
+}
+previewKind.onchange=()=>{stopMelody();drawScorePreview();};
+find('preview-play').onclick=()=>play(previewKind.value==='tabs');
+find('preview-pause').onclick=pauseMelody;
+find('preview-stop').onclick=stopMelody;
+scorePreview.addEventListener('close',stopMelody);
+window.addEventListener('resize',fitScorePreview);
 
 let micSession=null,practiceIndex=0,practiceCards=[];
 let pitchConfidence=0,noisePeak=0,calibrationEnd=0;
@@ -1444,7 +1611,9 @@ window.addEventListener('pagehide',stopPracticeClick);
 document.addEventListener('visibilitychange',()=>{
 if(document.hidden){find('practice-metronome').checked=false;stopPracticeClick();}
 });
+let practiceUploadedTabs=false,practiceTabIndex=-1;
 function restartPractice(){
+practiceTabIndex=-1;
 practiceCorrect=0;practiceAttempts=0;resetPracticeTiming();updatePracticeFeedback();
 practiceIndex=0;
 for(const card of practiceCards)card.classList.remove('practice-next','practice-hit');
@@ -1452,7 +1621,7 @@ practiceCards[0]?.classList.add('practice-next');
 showPracticeFingering();updatePracticeWindow();
 find('practice-status').textContent=micSession?.mode==='practice'?
 'Follow the blue outline, or press Enter to continue.':
-'Start the microphone to match notes, or press Enter to step through them.';
+practiceUploadedTabs?'Press Enter or the arrow keys to hear each note.':'Start the microphone to match notes, or press Enter to step through them.';
 find('practice-grid').focus({preventScroll:true});
 }
 find('practice-restart').addEventListener('click',restartPractice);
@@ -1460,10 +1629,11 @@ find('practice-expand').addEventListener('click',()=>{
 practiceExpanded=!practiceExpanded;updatePracticeWindow();
 find('practice-grid').focus({preventScroll:true});
 });
-function showPractice(pitches,back=practiceReturn,lengths=pitches.map(()=>4)){
+function showPractice(pitches,back=practiceReturn,lengths=pitches.map(()=>4),uploadedTabs=false){
 if(!pitches.every(Music.playable)){report("Shift yellow notes into A4–F6 before starting Play Along.");return;}
 practiceReturn=back;
 if(!pitches.length){report('Add notes before starting Play Along.');return;}
+practiceUploadedTabs=uploadedTabs;
 openPage('practice');
 find('practice-back').textContent=back==='editor'?'Back to Score Editor':'Back to Practice';
 fullPracticeNotes=[];fullPracticeDurations=[];
@@ -1514,6 +1684,16 @@ advancePractice(true);
 function updatePracticeFeedback(message=''){
 const stats=practiceCorrect+' / '+practiceNotes.length+' matched';
 find('practice-feedback').textContent=stats+(practiceAttempts?' · '+Math.round(100*practiceCorrect/practiceAttempts)+'% pitch accuracy':'')+(message?' · '+message:'');
+}
+function stepUploadedPractice(direction){
+if(!practiceNotes.length)return;
+if(micSession?.mode==='practice')stopMic();
+practiceCards[practiceIndex]?.classList.remove('practice-next');
+practiceTabIndex=Math.max(0,Math.min(practiceNotes.length-1,practiceTabIndex+direction));
+practiceIndex=practiceTabIndex;
+practiceCards[practiceIndex].classList.add('practice-next');
+showPracticeFingering();updatePracticeWindow();
+previewPitch(practiceNotes[practiceIndex]);
 }
 function advancePractice(matched){
 const card=practiceCards[practiceIndex];
@@ -2349,7 +2529,7 @@ const tutorialSteps=[
   "practice",
   "#oc93-practice-start",
   "Advance and restart",
-  "Play a matching note or press Enter to advance manually. Pause stops listening. Restart clears progress in the current range. The arrow below the cards expands the default eight-note view."
+  "Play a matching note or press Enter to advance manually. For uploaded tabs, Enter and the arrow keys highlight and play each note. Pause stops listening. Restart clears progress in the current range. The arrow below the cards expands the default eight-note view."
  ],
  [
   "Practice",
@@ -2384,7 +2564,7 @@ const tutorialSteps=[
   "editor",
   "#oc93-tab-creator",
   "Export fingering tabs",
-  "Choose Edit → Open tab editor, or select Tab editor beside Staff. Edit the diagrams, spacing, title, and credit. Press Play to follow the highlighted fingerings. Tabs matching the score use its timing. A different tab sequence plays one beat per note. Use Save as PDF for a fingering sheet. Save the score once to find it in Recent scores. Tab drafts save automatically in this browser, and changes appear in Edit history."
+  "Choose Edit → Open tab editor, or select Tab editor beside Staff. Edit the diagrams, spacing, title, and credit. Press Play to follow the highlighted fingerings, or use Enter and the left or right arrow keys to hear one at a time. Tabs matching the score use its timing. A different tab sequence plays one beat per note. Use File → Preview to watch the staff or tabs follow playback. Pause and press Play to resume. Use Save as PDF for a paginated fingering sheet. Save the score once to find it in Recent scores. Tab drafts save automatically in this browser, and changes appear in Edit history."
  ],
  [
   "Export",
@@ -2682,6 +2862,12 @@ try{
 window.pdfjsLib.GlobalWorkerOptions.workerSrc=workerURL;
 task=window.pdfjsLib.getDocument({data:new Uint8Array(await file.arrayBuffer()),isEvalSupported:false,disableFontFace:true});
 const pdf=await task.promise;
+const {info}=await pdf.getMetadata();
+const prefix='osm-tab-draft-v1:';
+if(info?.Keywords?.startsWith(prefix)){
+const text=decodeURIComponent(info.Keywords.slice(prefix.length));
+return {layout:text,pitches:[...text.matchAll(/[A-Ur]/g)].map(([code])=>nativeTabPitch(code))};
+}
 const labels=new Map();
 if(pdf.numPages>30)throw Error('Upload up to 30 pages at a time.');
 for(let i=1;i<=pdf.numPages;i++){
@@ -2829,7 +3015,15 @@ if(scores[1].error-scores[0].error<3)throw Error('Could not read fingering '+(in
 return scores[0].midi;
 });
 }
+function parseTabText(text){
+const layout=text.replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n');
+if(!/^[A-Ur|. :;()\[\]–—\-\s]+$/.test(layout)||!/[A-U]/.test(layout)){
+throw Error('Choose a tab text file saved by the OSM Tab editor.');
+}
+return {layout,pitches:[...layout.matchAll(/[A-Ur]/g)].map(([code])=>nativeTabPitch(code))};
+}
 async function readPracticeTab(file,active){
+if(/\.txt$/i.test(file.name))return parseTabText(await file.text());
 const signature=new Uint8Array(await file.slice(0,8).arrayBuffer());
 if((signature.join(',')==='137,80,78,71,13,10,26,10'||(signature[0]===255&&signature[1]===216&&signature[2]===255))){
 const bitmap=await createImageBitmap(file);
@@ -2850,21 +3044,23 @@ if(new TextDecoder().decode(signature).startsWith('%PDF-'))return readTabPitches
 throw Error('Choose a valid PNG, JPG, or PDF file.');
 }
 let pdfRequest=0;
-function bindTabUpload(id,isPractice){
+function bindTabUpload(id,isPractice,intoEditor=false){
 const input=find(id),hint=find(id+'-hint');
+if(hint){
 const help=hint.querySelector('button');
 help.addEventListener('click',event=>{
 if(event.pointerType!=='mouse'&&event.pointerType!=='pen')hint.toggleAttribute('data-open');
 });
 help.addEventListener('pointerleave',()=>hint.removeAttribute('data-open'));
 help.addEventListener('blur',()=>hint.removeAttribute('data-open'));
+}
 input.addEventListener('change',async()=>{
 const file=input.files[0];input.value='';
 if(!file)return;
-hint.hidden=true;hint.removeAttribute('data-open');
+if(hint){hint.hidden=true;hint.removeAttribute('data-open');}
 const request=++pdfRequest;
 const active=()=>request===pdfRequest&&(isPractice?
-currentPage==='practice-setup'&&practiceMode==='tabs':currentPage==='import');
+currentPage==='practice-setup'&&practiceMode==='tabs':intoEditor?currentPage==='editor'&&editorView==='tabs':currentPage==='import');
 try{
 report('Reading the ocarina tabs…');
 const result=await readPracticeTab(file,active);
@@ -2884,21 +3080,31 @@ pitches=(await teachTabLayout(result.canvas))??[];
 if(!active()||!pitches.length){if(active())report('');return;}
 const tokens=text.value.trim().split(/\s+/);
 if(!tokens.length||!tokens.every(t=>/^(Rest|[A-G]#?[456])$/i.test(t)))throw Error('Use pitch names separated by spaces, or Rest.');
-pitches.splice(0,pitches.length,...tokens.map(t=>t.toLowerCase()==='rest'?null:toMidi(t.toUpperCase())));
+const reviewed=tokens.map(t=>t.toLowerCase()==='rest'?null:toMidi(t.toUpperCase()));
+const layout=result.layout&&reviewed.length===pitches.length&&reviewed.every((pitch,i)=>pitch===pitches[i])?result.layout:null;
+pitches=reviewed;
 if(!pitches.every(Music.playable))throw Error('Use pitches between A4 and F6.');
-if(isPractice){showPractice(pitches,'practice-setup');return;}
+if(isPractice){showPractice(pitches,'practice-setup',undefined,true);return;}
+if(intoEditor){
+stopMelody();stopStep();
+nativeTabText.value=layout??defaultTabLayout(pitches.map(fingeringCode).join(''));
+tabStepIndex=-1;
+saveNativeTabDraft('Imported tabs');report('Imported '+pitches.length+' notes into the Tab editor.');
+return;
+}
 if(!canReplace()){report('');return;}
 const title=file.name.replace(/\.[^.]+$/,'')||'Imported score';
 loadProject({id:newId(),title,author:'',notes:pitches,lengths:pitches.map(()=>4),tempo:130,intervals:[]});
 draftChanged=true;openPage('editor');
 report('Imported '+pitches.length+' notes. Edit their durations in the score.');
 }catch(error){
-if(active()){hint.hidden=false;report(error.message);}
+if(active()){if(hint)hint.hidden=false;report(error.message);}
 }
 });
 }
 bindTabUpload('reference',true);
 bindTabUpload('import-image',false);
+bindTabUpload('native-tab-upload',false,true);
 find('practice-load').addEventListener('click',async()=>{
 try{
 if(/^X:/m.test(find('practice-input').value))await loadNotation();
@@ -3393,7 +3599,7 @@ function highlightWorkspace(){
 }
 
 function switchEditorView(view){
-  if(editorView==='tabs'&&view!=='tabs'&&tabPlayback.hidden===false&&scorePlaybackIndex<0)stopMelody();
+  if(editorView==='tabs'&&view!=='tabs'&&melody?.customTabs)stopMelody();
   editorView=view;
   find('score-desk').hidden=view==='tabs';
   for(const button of editorViews){
@@ -3458,6 +3664,7 @@ menuBar.addEventListener('click',event=>{
   closeEditorMenus();
   summaryButton.focus({preventScroll:true});
   if(command.startsWith('@'))openPage(command.slice(1));
+  else if(command==='score-preview')openScorePreview();
   else if(command==='rename-score')openRenameScore();
   else if(command==='delete-score'){
     const saved=projects.find(project=>project.id===projectId);
@@ -3692,10 +3899,14 @@ function stopRollCursor(){
   if(rollCursor)rollCursor.hidden=true;
 }
 
-function startRollCursor(index,duration){
+function pauseRollCursor(){
+  cancelAnimationFrame(rollFrame);rollFrame=null;rollPlayback=null;
+}
+
+function startRollCursor(index,duration,elapsed=0){
   cancelAnimationFrame(rollFrame);
   const start=score.events.slice(0,index).reduce((sum,event)=>sum+event.ticks,0);
-  rollPlayback={start,length:score.events[index].ticks,time:performance.now(),duration};
+  rollPlayback={start,length:score.events[index].ticks,time:performance.now()-elapsed,duration};
   if(rollWindow.open)animateRollCursor();
 }
 
@@ -3720,7 +3931,7 @@ function openPianoRoll(){
 }
 
 find('roll-close').onclick=()=>rollWindow.close();
-find('roll-play').onclick=play;
+find('roll-play').onclick=()=>play(false);
 find('roll-stop').onclick=stopMelody;
 for(const id of ['roll-grid','roll-zoom','roll-key-labels','roll-note-labels'])find(id).onchange=drawTimeline;
 for(const [id,property,min] of [['roll-start','start',0],['roll-duration','ticks',.125]]){

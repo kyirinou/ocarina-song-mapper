@@ -215,7 +215,7 @@ const tutorialSteps=[
   "practice",
   "#oc93-practice-start",
   "Advance and restart",
-  "Play a matching note or press Enter to advance manually. Pause stops listening. Restart clears progress in the current range. The arrow below the cards expands the default eight-note view."
+  "Play a matching note or press Enter to advance manually. For uploaded tabs, Enter and the arrow keys highlight and play each note. Pause stops listening. Restart clears progress in the current range. The arrow below the cards expands the default eight-note view."
  ],
  [
   "Practice",
@@ -250,7 +250,7 @@ const tutorialSteps=[
   "editor",
   "#oc93-tab-creator",
   "Export fingering tabs",
-  "Choose Edit → Open tab editor, or select Tab editor beside Staff. Edit the diagrams, spacing, title, and credit. Press Play to follow the highlighted fingerings. Tabs matching the score use its timing. A different tab sequence plays one beat per note. Use Save as PDF for a fingering sheet. Save the score once to find it in Recent scores. Tab drafts save automatically in this browser, and changes appear in Edit history."
+  "Choose Edit → Open tab editor, or select Tab editor beside Staff. Edit the diagrams, spacing, title, and credit. Press Play to follow the highlighted fingerings, or use Enter and the left or right arrow keys to hear one at a time. Tabs matching the score use its timing. A different tab sequence plays one beat per note. Use File → Preview to watch the staff or tabs follow playback. Pause and press Play to resume. Use Save as PDF for a paginated fingering sheet. Save the score once to find it in Recent scores. Tab drafts save automatically in this browser, and changes appear in Edit history."
  ],
  [
   "Export",

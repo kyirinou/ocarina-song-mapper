@@ -192,10 +192,14 @@ function stopRollCursor(){
   if(rollCursor)rollCursor.hidden=true;
 }
 
-function startRollCursor(index,duration){
+function pauseRollCursor(){
+  cancelAnimationFrame(rollFrame);rollFrame=null;rollPlayback=null;
+}
+
+function startRollCursor(index,duration,elapsed=0){
   cancelAnimationFrame(rollFrame);
   const start=score.events.slice(0,index).reduce((sum,event)=>sum+event.ticks,0);
-  rollPlayback={start,length:score.events[index].ticks,time:performance.now(),duration};
+  rollPlayback={start,length:score.events[index].ticks,time:performance.now()-elapsed,duration};
   if(rollWindow.open)animateRollCursor();
 }
 
@@ -220,7 +224,7 @@ function openPianoRoll(){
 }
 
 find('roll-close').onclick=()=>rollWindow.close();
-find('roll-play').onclick=play;
+find('roll-play').onclick=()=>play(false);
 find('roll-stop').onclick=stopMelody;
 for(const id of ['roll-grid','roll-zoom','roll-key-labels','roll-note-labels'])find(id).onchange=drawTimeline;
 for(const [id,property,min] of [['roll-start','start',0],['roll-duration','ticks',.125]]){

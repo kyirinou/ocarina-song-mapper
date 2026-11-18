@@ -151,6 +151,7 @@ const selected=soundChoice, sequence=run;
 audio();
 pending.then(()=>{
 if(selected!==soundChoice||sequence!==run||id.startsWith('pointer-'))return;
+if((id==='melody'||id==='tab-melody')&&(!melody||melody.paused||performance.now()-melody.started+melody.elapsed>=melody.duration*.9))return;
 start(id,idx,m);
 }).catch(loadError);
 return;
@@ -196,13 +197,36 @@ const pitch=name(score.events[index].pitch);
 chart.append(makeFinger(score.events[index].pitch));
 chart.setAttribute('aria-label','Fingering for '+pitch);
 }
+let melody=null;
 function updatePlayButton(playing){
-const label=playing?'Playing score':'Play all notes';
+const label=playing?'Playing score':melody?.paused?'Resume playback':'Play all notes';
 playBtn.setAttribute('aria-label',label);
 playBtn.title=label;
 playBtn.dataset.playing=String(playing);
+find('pause').disabled=!playing;
+find('preview-pause').disabled=!playing;
+find('preview-play').setAttribute('aria-label',melody?.paused?'Resume preview':'Play preview');
 }
-function stopMelody(){clearTabPlayback();stopRollCursor();highlightScore(-1);showPlaybackFingering(-1);find('score-playback').hidden=true;run++;if(timer!==null)clearTimeout(timer);timer=null;end('melody');end('tab-melody');updatePlayButton(false)}
+function silenceMelody(){
+run++;
+clearTimeout(timer);timer=null;
+end('melody');end('tab-melody');
+}
+function stopMelody(){
+melody=null;
+silenceMelody();
+clearTabPlayback();stopRollCursor();highlightScore(-1);
+highlightScorePreview(-1);
+showPlaybackFingering(-1);
+find('score-playback').hidden=true;
+updatePlayButton(false);
+}
+function pauseMelody(){
+if(!melody||melody.paused)return;
+melody.elapsed=Math.min(melody.duration,melody.elapsed+performance.now()-melody.started);
+melody.paused=true;
+silenceMelody();pauseRollCursor();updatePlayButton(false);
+}
 function scoreDuration(index){
 const event=score.events[index];
 if(event.ms!==null)return event.ms;
@@ -215,35 +239,54 @@ bpm=change.bpm;
 }
 return ms+(end-cursor)*15000/bpm;
 }
-function play(){
-const fromTabs=editorView==='tabs';
+function play(fromTabs=editorView==='tabs'){
+if(micSession?.mode==='convert'){report('Stop sound capture before playing the score.');return;}
+if(recording){report('Finish the timing recording before playing the whole score.');return;}
+if(melody?.paused&&melody.fromTabs===fromTabs){
+melody.paused=false;updatePlayButton(true);playMelodyNote();return;
+}
 const tabNotes=fromTabs?nativeTabNotes():[];
 const customTabs=fromTabs&&!tabNotesMatchScore(tabNotes);
 const length=customTabs?tabNotes.length:score.events.length;
 if(!length)return;
-if(micSession?.mode==='convert'){report('Stop sound capture before playing the score.');return;}
-if(recording){report('Finish the timing recording before playing the whole score.');return;}
 stopStep();stopMelody();
+melody={fromTabs,tabNotes,customTabs,length,index:0,elapsed:0,paused:false};
 if(fromTabs)prepareTabPlayback();
 if(editorView==='staff')drawStaff();
 find('score-playback').hidden=false;
-const token=run;let idx=0;updatePlayButton(true);
-function next(){
-if(token!==run)return;
-if(idx>=length){if(loop)idx=0;else{stopMelody();info.textContent='Melody complete · '+length+' notes';return}}
-const i=idx++,duration=(customTabs?60000/score.tempo:scoreDuration(i))/(+speed.value/100);
-if(customTabs){
-start('tab-melody',-1,tabNotes[i]);
-}else{
-startRollCursor(i,duration);start('melody',i);highlightScore(i);showPlaybackFingering(i);
+updatePlayButton(true);playMelodyNote();
 }
-highlightTabPlayback(i);
-bar.style.width=(idx/length*100)+'%';
-timer=setTimeout(()=>{end(customTabs?'tab-melody':'melody');timer=setTimeout(next,duration*.1)},duration*.9);
+function playMelodyNote(){
+const {index,customTabs,tabNotes,length,elapsed}=melody;
+const duration=elapsed>0?melody.duration:(customTabs?60000/score.tempo:scoreDuration(index))/(+speed.value/100);
+melody.duration=duration;
+melody.started=performance.now();
+const voice=customTabs?'tab-melody':'melody';
+const token=++run;
+const advance=()=>{
+if(run!==token)return;
+if(index+1===length&&!loop){
+stopMelody();info.textContent='Melody complete · '+length+' notes';return;
 }
-next();
+melody.index=(index+1)%length;melody.elapsed=0;playMelodyNote();
+};
+const gate=duration*.9;
+if(elapsed<gate){
+start(voice,customTabs?-1:index,customTabs?tabNotes[index]:score.events[index].pitch);
+timer=setTimeout(()=>{
+if(run!==token)return;
+end(voice);timer=setTimeout(advance,duration-gate);
+},gate-elapsed);
+}else timer=setTimeout(advance,Math.max(0,duration-elapsed));
+if(!customTabs){
+startRollCursor(index,duration,elapsed);highlightScore(index);showPlaybackFingering(index);
 }
-playBtn.addEventListener('click',play);
+highlightTabPlayback(index);
+highlightScorePreview(index);
+bar.style.width=((index+1)/length*100)+'%';
+}
+playBtn.addEventListener('click',()=>play());
+root.querySelector('#oc93-pause').onclick=pauseMelody;
 root.querySelector('#oc93-score-stop').addEventListener('click',stopMelody);
 root.querySelector('#oc93-stop').addEventListener('click',()=>{
 finishRecording();stopStep();stopMelody();for(const id of [...voices.keys()])end(id);
@@ -253,17 +296,29 @@ root.querySelector('#oc93-loop').addEventListener('click',e=>{loop=!loop;e.curre
 speed.addEventListener('input',()=>root.querySelector('#oc93-speedlabel').textContent=speed.value+'%');
 function editable(el){return el&&(/INPUT|TEXTAREA|SELECT/.test(el.tagName)||el.isContentEditable)}
 document.addEventListener('keydown',e=>{
-if(e.repeat||e.ctrlKey||e.metaKey||e.altKey||editable(e.target)||tutorial.open||find('scan-review').open)return;
+if(e.repeat||e.ctrlKey||e.metaKey||e.altKey||tutorial.open||find('scan-review').open||find('score-preview').open)return;
+if(editable(e.target)&&!(e.target===nativeTabText&&nativeTabText.readOnly))return;
 if(currentPage==='palette'){
 const index=paletteKeys.indexOf(e.code.startsWith('Key')?e.code.slice(3):'');
 if(index>=0){e.preventDefault();selectFingering(69+index,true);}
 return;
 }
+if(currentPage==='practice'&&practiceUploadedTabs&&!rangeDialog.open&&!e.shiftKey&&!e.defaultPrevented&&
+['Enter','ArrowLeft','ArrowRight'].includes(e.code)&&!e.target?.closest?.('button,a')){
+e.preventDefault();stepUploadedPractice(e.code==='ArrowLeft'?-1:1);return;
+}
 if(currentPage==='practice'&&!rangeDialog.open&&e.code==='Enter'&&!e.shiftKey&&!e.defaultPrevented&&!e.target?.closest?.('button,a')){
 e.preventDefault();advancePractice(false);return;
 }
 if(currentPage!=='editor'||micSession?.mode==='convert'||swapDialog.open||!noteMenu.hidden)return;
-if(e.defaultPrevented||e.target?.closest?.('.osm-menubar, #oc93-piano-roll'))return;
+if(e.defaultPrevented||e.target?.closest?.('.osm-menubar, #oc93-piano-roll, dialog'))return;
+if(editorView==='tabs'&&e.code==='Escape'&&!melody&&!tabPlayback.hidden){
+e.preventDefault();clearTabPlayback();return;
+}
+if(editorView==='tabs'&&!recording&&!e.shiftKey&&['Enter','ArrowLeft','ArrowRight'].includes(e.code)){
+if(e.code==='Enter'&&e.target.closest?.('button')&&!e.target.closest('.osm-viewbar'))return;
+e.preventDefault();stepNativeTab(e.code==='ArrowLeft'?-1:1);return;
+}
 if((e.code==='Delete'||e.code==='Backspace')&&e.target?.closest('#oc93-sequence .note')){
 e.preventDefault();removeSelected();pads[position]?.focus({preventScroll:true});return;
 }

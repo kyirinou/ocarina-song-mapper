@@ -212,7 +212,9 @@ window.addEventListener('pagehide',stopPracticeClick);
 document.addEventListener('visibilitychange',()=>{
 if(document.hidden){find('practice-metronome').checked=false;stopPracticeClick();}
 });
+let practiceUploadedTabs=false,practiceTabIndex=-1;
 function restartPractice(){
+practiceTabIndex=-1;
 practiceCorrect=0;practiceAttempts=0;resetPracticeTiming();updatePracticeFeedback();
 practiceIndex=0;
 for(const card of practiceCards)card.classList.remove('practice-next','practice-hit');
@@ -220,7 +222,7 @@ practiceCards[0]?.classList.add('practice-next');
 showPracticeFingering();updatePracticeWindow();
 find('practice-status').textContent=micSession?.mode==='practice'?
 'Follow the blue outline, or press Enter to continue.':
-'Start the microphone to match notes, or press Enter to step through them.';
+practiceUploadedTabs?'Press Enter or the arrow keys to hear each note.':'Start the microphone to match notes, or press Enter to step through them.';
 find('practice-grid').focus({preventScroll:true});
 }
 find('practice-restart').addEventListener('click',restartPractice);
@@ -228,10 +230,11 @@ find('practice-expand').addEventListener('click',()=>{
 practiceExpanded=!practiceExpanded;updatePracticeWindow();
 find('practice-grid').focus({preventScroll:true});
 });
-function showPractice(pitches,back=practiceReturn,lengths=pitches.map(()=>4)){
+function showPractice(pitches,back=practiceReturn,lengths=pitches.map(()=>4),uploadedTabs=false){
 if(!pitches.every(Music.playable)){report("Shift yellow notes into A4–F6 before starting Play Along.");return;}
 practiceReturn=back;
 if(!pitches.length){report('Add notes before starting Play Along.');return;}
+practiceUploadedTabs=uploadedTabs;
 openPage('practice');
 find('practice-back').textContent=back==='editor'?'Back to Score Editor':'Back to Practice';
 fullPracticeNotes=[];fullPracticeDurations=[];
@@ -282,6 +285,16 @@ advancePractice(true);
 function updatePracticeFeedback(message=''){
 const stats=practiceCorrect+' / '+practiceNotes.length+' matched';
 find('practice-feedback').textContent=stats+(practiceAttempts?' · '+Math.round(100*practiceCorrect/practiceAttempts)+'% pitch accuracy':'')+(message?' · '+message:'');
+}
+function stepUploadedPractice(direction){
+if(!practiceNotes.length)return;
+if(micSession?.mode==='practice')stopMic();
+practiceCards[practiceIndex]?.classList.remove('practice-next');
+practiceTabIndex=Math.max(0,Math.min(practiceNotes.length-1,practiceTabIndex+direction));
+practiceIndex=practiceTabIndex;
+practiceCards[practiceIndex].classList.add('practice-next');
+showPracticeFingering();updatePracticeWindow();
+previewPitch(practiceNotes[practiceIndex]);
 }
 function advancePractice(matched){
 const card=practiceCards[practiceIndex];

@@ -414,11 +414,11 @@ html[data-theme=light] #oc93 :is(.osm-start-nav .ctrl,.osm-editor-header .ctrl,.
 }
 
 /* Keep the playback marker legible against the white score in either theme. */
-#oc93 #oc93-staff .playing-note {
+#oc93 :is(#oc93-staff,#oc93-preview-paper) .playing-note {
   filter:drop-shadow(0 0 2px #75afff) drop-shadow(0 0 2px #75afff);
 }
-#oc93 #oc93-staff .playing-note,
-#oc93 #oc93-staff .playing-note path {
+#oc93 :is(#oc93-staff,#oc93-preview-paper) .playing-note,
+#oc93 :is(#oc93-staff,#oc93-preview-paper) .playing-note path {
   fill:#003fa6!important;
 }
 
@@ -507,3 +507,13 @@ body:has(#oc93-page-home:not([hidden])) { max-width:840px; }
 #oc93-recognition-pitch-stats meter::-webkit-meter-optimum-value { background:var(--viz-accent); }
 #oc93-recognition-pitch-stats meter::-moz-meter-bar { background:var(--viz-accent); }
 #oc93-recognition-pitch-stats li > :last-child { text-align:right; color:var(--viz-muted); font-variant-numeric:tabular-nums; }
+
+#oc93 #oc93-score-preview { width:96vw; max-width:1280px; height:94dvh; max-height:none; padding:0; overflow:hidden; }
+#oc93 #oc93-score-preview[open] { display:grid; grid-template-rows:auto minmax(0,1fr) auto; }
+#oc93-score-preview header { flex-wrap:wrap; gap:8px; }
+#oc93 #oc93-score-preview header :is(h3,.toolbar) { margin:0; }
+#oc93-preview-scroll { overflow:auto; background:var(--viz-panel); padding:10px; }
+#oc93-preview-paper { width:max-content; min-width:360px; margin:auto; color:#000; background:#fff; }
+#oc93-preview-paper svg { display:block; }
+#oc93-preview-paper .preview-tab-active { fill:#e0eeff; stroke:#1454b5; stroke-width:2; }
+#oc93-preview-status { margin:8px 12px; }

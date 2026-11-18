@@ -7,6 +7,12 @@ try{
 window.pdfjsLib.GlobalWorkerOptions.workerSrc=workerURL;
 task=window.pdfjsLib.getDocument({data:new Uint8Array(await file.arrayBuffer()),isEvalSupported:false,disableFontFace:true});
 const pdf=await task.promise;
+const {info}=await pdf.getMetadata();
+const prefix='osm-tab-draft-v1:';
+if(info?.Keywords?.startsWith(prefix)){
+const text=decodeURIComponent(info.Keywords.slice(prefix.length));
+return {layout:text,pitches:[...text.matchAll(/[A-Ur]/g)].map(([code])=>nativeTabPitch(code))};
+}
 const labels=new Map();
 if(pdf.numPages>30)throw Error('Upload up to 30 pages at a time.');
 for(let i=1;i<=pdf.numPages;i++){
@@ -154,7 +160,15 @@ if(scores[1].error-scores[0].error<3)throw Error('Could not read fingering '+(in
 return scores[0].midi;
 });
 }
+function parseTabText(text){
+const layout=text.replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n');
+if(!/^[A-Ur|. :;()\[\]–—\-\s]+$/.test(layout)||!/[A-U]/.test(layout)){
+throw Error('Choose a tab text file saved by the OSM Tab editor.');
+}
+return {layout,pitches:[...layout.matchAll(/[A-Ur]/g)].map(([code])=>nativeTabPitch(code))};
+}
 async function readPracticeTab(file,active){
+if(/\.txt$/i.test(file.name))return parseTabText(await file.text());
 const signature=new Uint8Array(await file.slice(0,8).arrayBuffer());
 if((signature.join(',')==='137,80,78,71,13,10,26,10'||(signature[0]===255&&signature[1]===216&&signature[2]===255))){
 const bitmap=await createImageBitmap(file);
@@ -175,21 +189,23 @@ if(new TextDecoder().decode(signature).startsWith('%PDF-'))return readTabPitches
 throw Error('Choose a valid PNG, JPG, or PDF file.');
 }
 let pdfRequest=0;
-function bindTabUpload(id,isPractice){
+function bindTabUpload(id,isPractice,intoEditor=false){
 const input=find(id),hint=find(id+'-hint');
+if(hint){
 const help=hint.querySelector('button');
 help.addEventListener('click',event=>{
 if(event.pointerType!=='mouse'&&event.pointerType!=='pen')hint.toggleAttribute('data-open');
 });
 help.addEventListener('pointerleave',()=>hint.removeAttribute('data-open'));
 help.addEventListener('blur',()=>hint.removeAttribute('data-open'));
+}
 input.addEventListener('change',async()=>{
 const file=input.files[0];input.value='';
 if(!file)return;
-hint.hidden=true;hint.removeAttribute('data-open');
+if(hint){hint.hidden=true;hint.removeAttribute('data-open');}
 const request=++pdfRequest;
 const active=()=>request===pdfRequest&&(isPractice?
-currentPage==='practice-setup'&&practiceMode==='tabs':currentPage==='import');
+currentPage==='practice-setup'&&practiceMode==='tabs':intoEditor?currentPage==='editor'&&editorView==='tabs':currentPage==='import');
 try{
 report('Reading the ocarina tabs…');
 const result=await readPracticeTab(file,active);
@@ -209,21 +225,31 @@ pitches=(await teachTabLayout(result.canvas))??[];
 if(!active()||!pitches.length){if(active())report('');return;}
 const tokens=text.value.trim().split(/\s+/);
 if(!tokens.length||!tokens.every(t=>/^(Rest|[A-G]#?[456])$/i.test(t)))throw Error('Use pitch names separated by spaces, or Rest.');
-pitches.splice(0,pitches.length,...tokens.map(t=>t.toLowerCase()==='rest'?null:toMidi(t.toUpperCase())));
+const reviewed=tokens.map(t=>t.toLowerCase()==='rest'?null:toMidi(t.toUpperCase()));
+const layout=result.layout&&reviewed.length===pitches.length&&reviewed.every((pitch,i)=>pitch===pitches[i])?result.layout:null;
+pitches=reviewed;
 if(!pitches.every(Music.playable))throw Error('Use pitches between A4 and F6.');
-if(isPractice){showPractice(pitches,'practice-setup');return;}
+if(isPractice){showPractice(pitches,'practice-setup',undefined,true);return;}
+if(intoEditor){
+stopMelody();stopStep();
+nativeTabText.value=layout??defaultTabLayout(pitches.map(fingeringCode).join(''));
+tabStepIndex=-1;
+saveNativeTabDraft('Imported tabs');report('Imported '+pitches.length+' notes into the Tab editor.');
+return;
+}
 if(!canReplace()){report('');return;}
 const title=file.name.replace(/\.[^.]+$/,'')||'Imported score';
 loadProject({id:newId(),title,author:'',notes:pitches,lengths:pitches.map(()=>4),tempo:130,intervals:[]});
 draftChanged=true;openPage('editor');
 report('Imported '+pitches.length+' notes. Edit their durations in the score.');
 }catch(error){
-if(active()){hint.hidden=false;report(error.message);}
+if(active()){if(hint)hint.hidden=false;report(error.message);}
 }
 });
 }
 bindTabUpload('reference',true);
 bindTabUpload('import-image',false);
+bindTabUpload('native-tab-upload',false,true);
 find('practice-load').addEventListener('click',async()=>{
 try{
 if(/^X:/m.test(find('practice-input').value))await loadNotation();
