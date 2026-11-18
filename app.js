@@ -1032,46 +1032,16 @@ if(!score.events.length){report('Add notes before exporting a PDF.');return;}
 const button=find('pdf');
 const title=projectName.value.trim()||'Untitled song';
 const credit=authorInput.value.trim();
-const staging=document.createElement('div');
-staging.setAttribute('aria-hidden','true');
-staging.style.cssText='position:fixed;top:0;left:-10000px;width:720px;pointer-events:none';
-document.body.append(staging);
+const entries=scoreEntries(),bpm=score.tempo;
 button.disabled=true;
 try{
 await loadPDFExport();
-const entries=score.pitches.map((m,index)=>({index,pitch:pitchText(m),beats:score.events[index].ticks/4}));
-window.ABCJS.renderAbc(staging,engravedScore(entries,score.tempo).abc,{staffwidth:680,oneSvgPerLine:true});
-const systems=[...staging.querySelectorAll('svg')].filter(svg=>svg.querySelector('[data-name="staff"], [class*="abcjs-note"], path'));
-if(!systems.length)throw Error('No notation was rendered.');
-const pdf=new window.jspdf.jsPDF({unit:'pt',format:'a4'});
-pdf.setProperties({title,author:credit});
-const margin=42, pageWidth=pdf.internal.pageSize.getWidth(), pageHeight=pdf.internal.pageSize.getHeight();
-const width=pageWidth-2*margin;
-let y=margin;
-pdf.setFontSize(22);
-const heading=pdf.splitTextToSize(title,width);
-pdf.text(heading,margin,y+22);y+=heading.length*26+8;
-if(credit){
-pdf.setFontSize(12);
-const lines=pdf.splitTextToSize(credit,width);
-pdf.text(lines,margin,y+12);y+=lines.length*15+8;
-}
-for(const svg of systems){
-const view=(svg.getAttribute('viewBox')||'').split(/[ ,]+/).map(Number);
-const naturalWidth=view[2]||parseFloat(svg.getAttribute('width'));
-const naturalHeight=view[3]||parseFloat(svg.getAttribute('height'));
-if(!(naturalWidth>0&&naturalHeight>0))throw Error('A staff line has no printable dimensions.');
-const scale=Math.min(width/naturalWidth,(pageHeight-2*margin)/naturalHeight);
-const height=naturalHeight*scale;
-if(y+height>pageHeight-margin){pdf.addPage();y=margin;}
-await pdf.svg(svg,{x:margin,y,width:naturalWidth*scale,height});
-y+=height+6;
-}
+const pages=await staffPaper(title,credit,entries,bpm);
 const filename=title.replace(/[\\/:*?"<>|]/g,'-').trim()||'ocarina-score';
-pdf.save(filename+'.pdf');
+await saveScorePaper(pages,{title,author:credit},filename);
 report('PDF exported.');
 }catch(error){report('Could not export the music score: '+error.message);}
-finally{staging.remove();button.disabled=false;}
+finally{button.disabled=false;}
 });
 
 
@@ -1293,33 +1263,11 @@ find('native-tab-pdf').onclick=async()=>{
 const button=find('native-tab-pdf');button.disabled=true;
 try{
 const draft=nativeTabDraft();
+const filename=nativeTabFilename();
 await loadPDFExport();
-const pdf=new window.jspdf.jsPDF({unit:'pt',format:'a4'});
-pdf.setProperties({title:draft.title,author:draft.credit,keywords:'osm-tab-draft-v1:'+encodeURIComponent(draft.text)});
-const margin=32,width=pdf.internal.pageSize.getWidth()-2*margin;
-const bottom=pdf.internal.pageSize.getHeight()-margin;
-let y=margin;
-for(const [value,fontSize] of [[draft.title,20],[draft.credit,11]]){
-if(!value.trim())continue;
-pdf.setFontSize(fontSize);
-for(const line of pdf.splitTextToSize(value,width)){
-if(y+fontSize*1.25>bottom){pdf.addPage();y=margin;}
-pdf.text(line,margin,y+fontSize);
-y+=fontSize*1.25;
-}
-y+=6;
-}
-const rowHeight=Number(draft.size)+8;
-const rows=nativeTabRows(draft.text,Math.max(1,Math.floor(width/Number(draft.size))));
-for(let start=0;start<rows.length;){
-if(y+rowHeight>bottom){pdf.addPage();y=margin;}
-const count=Math.floor((bottom-y)/rowHeight);
-const pageRows=rows.slice(start,start+count);
-const art=nativeTabArtwork({rows:pageRows,heading:false,indexed:false});
-await pdf.svg(art.svg,{x:margin,y,width:art.width,height:art.height});
-start+=pageRows.length;y+=art.height;
-}
-pdf.save(nativeTabFilename()+'.pdf');
+const pages=await tabPaper(draft);
+await saveScorePaper(pages, {title:draft.title,author:draft.credit,
+  keywords:'osm-tab-draft-v1:'+encodeURIComponent(draft.text)},filename);
 }catch(error){nativeTabStatus.textContent=error.message;}
 finally{button.disabled=false;}
 };
@@ -1337,51 +1285,215 @@ nativeTabText.addEventListener('pointerdown',()=>{
 if(!melody&&nativeTabText.readOnly)clearTabPlayback();
 });
 
+const scorePaper={width:595.28,height:841.89,margin:32};
+const scorePaperWidth=scorePaper.width-2*scorePaper.margin;
+const scorePaperHeight=scorePaper.height-2*scorePaper.margin;
+const paperMeasure=document.createElement('canvas').getContext('2d');
+
+function paperHeading(text,size){
+if(!text.trim())return [];
+const font=size+'px Helvetica, Arial, sans-serif';
+paperMeasure.font=font;
+const lines=[];
+let line='';
+for(const word of text.trim().split(/\s+/)){
+if(line&&paperMeasure.measureText(line+' '+word).width>scorePaperWidth){lines.push(line);line='';}
+if(paperMeasure.measureText(word).width<=scorePaperWidth){
+line+=(line?' ':'')+word;
+continue;
+}
+for(const letter of word){
+if(line&&paperMeasure.measureText(line+letter).width>scorePaperWidth){lines.push(line);line='';}
+line+=letter;
+}
+}
+if(line)lines.push(line);
+return lines.map((line,i)=>{
+const height=size*1.25+(i===lines.length-1?8:0);
+const svg=document.createElementNS(svgNS,'svg');
+svg.setAttribute('width',scorePaperWidth);svg.setAttribute('height',height);
+rhythmShape(svg,'text',{x:0,y:size,'font-size':size,'font-family':'Helvetica, Arial, sans-serif',fill:'#000'});
+svg.lastChild.textContent=line;
+return {svg,width:scorePaperWidth,height};
+});
+}
+
+function paginateScorePaper(blocks){
+const pages=[[]];
+let y=scorePaper.margin;
+for(const block of blocks){
+if(y>scorePaper.margin&&y+block.height>scorePaper.height-scorePaper.margin+.001){
+pages.push([]);y=scorePaper.margin;
+}
+pages.at(-1).push({...block,y});
+y+=block.height;
+}
+return pages;
+}
+
+async function staffPaper(title,credit,entries,bpm){
+await loadNotation();
+const staging=document.createElement('div');
+staging.setAttribute('aria-hidden','true');
+staging.style.cssText='position:fixed;top:0;left:-10000px;width:760px;pointer-events:none';
+document.body.append(staging);
+try{
+const {abc,glyphIndexes}=engravedScore(entries,bpm);
+window.ABCJS.renderAbc(staging,abc,{add_classes:true,staffwidth:720,oneSvgPerLine:true});
+const systems=[...staging.querySelectorAll('svg')].filter(svg=>svg.querySelector('path'));
+if(!systems.length)throw Error('No notation was rendered.');
+let glyphIndex=0;
+const blocks=systems.map(svg=>{
+const view=svg.viewBox.baseVal;
+const width=view.width||parseFloat(svg.getAttribute('width'));
+const height=view.height||parseFloat(svg.getAttribute('height'));
+if(!(width>0&&height>0))throw Error('A staff line has no printable dimensions.');
+const scale=Math.min(scorePaperWidth/width,scorePaperHeight/height);
+const printedWidth=width*scale,printedHeight=height*scale;
+if(!view.width||!view.height)svg.setAttribute('viewBox','0 0 '+width+' '+height);
+svg.setAttribute('width',printedWidth);svg.setAttribute('height',printedHeight);
+const notes=[...svg.querySelectorAll('.abcjs-note,.abcjs-rest')].map(node=>[glyphIndexes[glyphIndex++],node]);
+return {svg,width:printedWidth,svgHeight:printedHeight,height:Math.min(scorePaperHeight,printedHeight+6),notes};
+});
+return paginateScorePaper([...paperHeading(title,22),...paperHeading(credit,12),...blocks]);
+}finally{staging.remove();}
+}
+
+async function tabPaper(draft){
+const size=Number(draft.size),rowHeight=size*1.15, font=size+'px OcarinaFingering, monospace';
+await document.fonts.load(font,'A');
+paperMeasure.font=font;
+const metrics=paperMeasure.measureText('A'),tabWidth=paperMeasure.measureText(' ').width*4;
+const baseline=(rowHeight+metrics.fontBoundingBoxAscent-metrics.fontBoundingBoxDescent)/2;
+let noteIndex=0,widest=0;
+const rows=draft.text.split('\n').map(line=>{
+let width=0;
+const notes=[];
+const segments=line.split('\t').map((text,i)=>{
+if(i)width=(Math.floor(width/tabWidth)+1)*tabWidth;
+const x=width;
+for(const note of text.matchAll(/[A-Ur]/g)){
+const start=paperMeasure.measureText(text.slice(0,note.index)).width;
+notes.push({index:noteIndex++,x:x+start});
+}
+width+=paperMeasure.measureText(text).width;
+return {text,x};
+});
+widest=Math.max(widest,width);
+return {segments,notes};
+});
+// Keep the spacing between notes when fitting long, manually arranged rows to paper.
+const scale=Math.min(1,scorePaperWidth/Math.max(1,widest));
+const blocks=rows.map(({segments,notes})=>({
+segments,font,scale,baseline,height:rowHeight*scale,noteWidth:size*scale,
+notes:notes.map(note=>({...note,x:note.x*scale}))
+}));
+return paginateScorePaper([...paperHeading(draft.title,22),...paperHeading(draft.credit,12),...blocks]);
+}
+
+function paintTabPage(blocks,resolution){
+const rows=blocks.filter(block=>block.segments);
+if(!rows.length)return null;
+const top=rows[0].y-4;
+const height=rows.at(-1).y+rows.at(-1).height-top+4;
+const canvas=document.createElement('canvas');
+canvas.width=Math.ceil(scorePaperWidth*resolution);
+canvas.height=Math.ceil(height*resolution);
+const context=canvas.getContext('2d',{alpha:false});
+context.scale(canvas.width/scorePaperWidth,canvas.height/height);
+context.fillStyle='#fff';
+context.fillRect(0,0,scorePaperWidth,height);
+context.fillStyle='#000';
+for(const row of rows){
+context.save();
+context.translate(0,row.y-top);context.scale(row.scale,row.scale);
+context.font=row.font;
+for(const {text,x} of row.segments)context.fillText(text,x,row.baseline);
+context.restore();
+}
+return {canvas,top,height};
+}
+
+async function saveScorePaper(pages,properties,filename){
+const pdf=new window.jspdf.jsPDF({unit:'pt',format:[scorePaper.width,scorePaper.height],compress:true});
+pdf.setProperties(properties);
+for(const [index,blocks] of pages.entries()){
+if(index)pdf.addPage();
+for(const {svg,width,height,svgHeight,y} of blocks){
+if(svg)await pdf.svg(svg,{x:scorePaper.margin,y,width,height:svgHeight??height});
+}
+const tabs=paintTabPage(blocks,4);
+if(tabs)pdf.addImage(tabs.canvas,'PNG',scorePaper.margin,tabs.top,scorePaperWidth,tabs.height);
+}
+pdf.save(filename+'.pdf');
+}
+
 const scorePreview=find('score-preview');
 const previewKind=find('preview-kind');
 const previewPaper=find('preview-paper');
 const previewScroll=find('preview-scroll');
-let previewNotes=[],previewActive=[];
+let previewNotes=[],previewActive=[],previewRequest=0;
 
 function fitScorePreview(){
-if(!scorePreview.open||!previewPaper.firstElementChild)return;
-previewPaper.style.zoom='1';
-const width=previewPaper.scrollWidth,height=previewPaper.scrollHeight;
-previewPaper.style.zoom=String(Math.min(1,(previewScroll.clientWidth-20)/width,
-  Math.max(.42,(previewScroll.clientHeight-20)/height)));
+if(!scorePreview.open)return;
+const gutters=24;
+previewPaper.style.zoom=String(Math.max(.1,Math.min(1.25,(previewScroll.clientWidth-gutters)/scorePaper.width,
+  (previewScroll.clientHeight-gutters)/scorePaper.height)));
+}
+
+function drawPreviewPage(blocks){
+const page=document.createElement('div');
+page.className='osm-preview-page';
+page.style.width=scorePaper.width+'px';page.style.height=scorePaper.height+'px';
+const tabs=paintTabPage(blocks,2);
+if(tabs){
+tabs.canvas.style.top=tabs.top+'px';tabs.canvas.style.left=scorePaper.margin+'px';
+tabs.canvas.style.width=scorePaperWidth+'px';tabs.canvas.style.height=tabs.height+'px';
+page.append(tabs.canvas);
+}
+for(const {svg,notes,y,height,noteWidth} of blocks){
+if(svg){
+svg.style.top=y+'px';svg.style.left=scorePaper.margin+'px';
+page.append(svg);
+for(const [index,node] of notes??[]){
+if(index!==undefined)(previewNotes[index]??=[]).push(node);
+}
+}else{
+for(const note of notes){
+const cell=document.createElement('span');
+cell.dataset.tabIndex=note.index;
+cell.style.left=scorePaper.margin+note.x+'px';cell.style.top=y+'px';
+cell.style.width=noteWidth+'px';cell.style.height=height+'px';
+page.append(cell);
+previewNotes[note.index]=[cell];
+}
+}
+}
+return page;
 }
 
 async function drawScorePreview(){
+const request=++previewRequest;
 const tabView=previewKind.value==='tabs';
 const status=find('preview-status'),playButton=find('preview-play');
 previewPaper.replaceChildren();
 previewNotes=[];previewActive=[];
 playButton.disabled=true;
 status.hidden=true;
-find('score-preview-title').textContent=(tabView?nativeTabTitle.value:projectName.value).trim()||'Untitled score';
+const draft=tabView?nativeTabDraft():null;
+const title=tabView?draft.title.trim():projectName.value.trim()||'Untitled song';
+find('score-preview-title').textContent=title||'Untitled score';
 try{
-if(tabView){
-const notes=nativeTabNotes();
-if(!notes.length)throw Error('Add fingerings before previewing tabs.');
-const {svg}=nativeTabArtwork({columns:12});
-previewPaper.append(svg);
-svg.querySelectorAll('[data-tab-index]').forEach(node=>{previewNotes.push([node]);});
-}else{
-if(!score.events.length)throw Error('Add notes before previewing the staff.');
-await loadNotation();
-if(!scorePreview.open||previewKind.value!=='staff')return;
-const {abc,glyphIndexes}=engravedScore(scoreEntries(),score.tempo);
-window.ABCJS.renderAbc(previewPaper,abc,{add_classes:true,staffwidth:720,oneSvgPerLine:true});
-previewPaper.querySelectorAll('.abcjs-note,.abcjs-rest').forEach((glyph,i)=>{
-const index=glyphIndexes[i];
-if(index===undefined)return;
-(previewNotes[index]??=[]).push(glyph);
-});
-}
-playButton.disabled=false;
-previewScroll.scrollTop=0;
+if(tabView&&!nativeTabNotes().length)throw Error('Add fingerings before previewing tabs.');
+if(!tabView&&!score.events.length)throw Error('Add notes before previewing the staff.');
+const pages=tabView?await tabPaper(draft):await staffPaper(title,authorInput.value.trim(),scoreEntries(),score.tempo);
+if(request!==previewRequest||!scorePreview.open)return;
+for(const blocks of pages)previewPaper.append(drawPreviewPage(blocks));
 fitScorePreview();
+previewScroll.scrollTo(0,0);
+playButton.disabled=false;
 }catch(error){
+if(request!==previewRequest||!scorePreview.open)return;
 status.textContent=error.message;status.hidden=false;
 }
 }
@@ -1406,7 +1518,12 @@ previewKind.onchange=()=>{stopMelody();drawScorePreview();};
 find('preview-play').onclick=()=>play(previewKind.value==='tabs');
 find('preview-pause').onclick=pauseMelody;
 find('preview-stop').onclick=stopMelody;
-scorePreview.addEventListener('close',stopMelody);
+scorePreview.addEventListener('close',()=>{
+previewRequest++;
+previewPaper.replaceChildren();
+previewNotes=[];previewActive=[];
+stopMelody();
+});
 window.addEventListener('resize',fitScorePreview);
 
 let micSession=null,practiceIndex=0,practiceCards=[];
@@ -2578,7 +2695,7 @@ const tutorialSteps=[
   "editor",
   "#oc93-tab-creator",
   "Export fingering tabs",
-  "Choose Edit → Open tab editor, or select Tab editor beside Staff. Edit the diagrams, spacing, title, and credit. Press Play to follow the highlighted fingerings, or use Enter and the left or right arrow keys to hear one at a time. Hold Enter to sustain a note. Tabs matching the score use its timing. A different tab sequence plays one beat per note. Use File → Preview to watch the staff or tabs follow playback. Pause and press Play to resume. Use Save as PDF for a paginated fingering sheet. Save the score once to find it in Recent scores. Tab drafts save automatically in this browser, and changes appear in Edit history."
+  "Choose Edit → Open tab editor, or select Tab editor beside Staff. Edit the diagrams, spacing, title, and credit. Press Play to follow the highlighted fingerings, or use Enter and the left or right arrow keys to hear one at a time. Hold Enter to sustain a note. Tabs matching the score use its timing. A different tab sequence plays one beat per note. Use File → Preview to follow playback on the same pages as the PDF. The tab pages keep your spaces and line breaks. Pause and press Play to resume. Use Save as PDF for a paginated fingering sheet. Save the score once to find it in Recent scores. Tab drafts save automatically in this browser, and changes appear in Edit history."
  ],
  [
   "Export",

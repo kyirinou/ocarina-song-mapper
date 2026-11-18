@@ -508,12 +508,13 @@ body:has(#oc93-page-home:not([hidden])) { max-width:840px; }
 #oc93-recognition-pitch-stats meter::-moz-meter-bar { background:var(--viz-accent); }
 #oc93-recognition-pitch-stats li > :last-child { text-align:right; color:var(--viz-muted); font-variant-numeric:tabular-nums; }
 
-#oc93 #oc93-score-preview { width:96vw; max-width:1280px; height:94dvh; max-height:none; padding:0; overflow:hidden; }
-#oc93 #oc93-score-preview[open] { display:grid; grid-template-rows:auto minmax(0,1fr) auto; }
+#oc93 #oc93-score-preview { width:96vw; max-width:1280px; height:94dvh; max-height:none; box-sizing:border-box; padding:0; overflow:hidden; }
+#oc93 #oc93-score-preview[open] { display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr) auto; }
 #oc93-score-preview header { flex-wrap:wrap; gap:8px; }
 #oc93 #oc93-score-preview header :is(h3,.toolbar) { margin:0; }
-#oc93-preview-scroll { overflow:auto; background:var(--viz-panel); padding:10px; }
-#oc93-preview-paper { width:max-content; min-width:360px; margin:auto; color:#000; background:#fff; }
-#oc93-preview-paper svg { display:block; }
-#oc93-preview-paper .preview-tab-active { fill:#e0eeff; stroke:#1454b5; stroke-width:2; }
+#oc93-preview-scroll { overflow:auto; scrollbar-gutter:stable both-edges; background:var(--viz-panel); padding:10px; }
+#oc93-preview-paper { display:grid; gap:16px; width:max-content; margin:auto; color:#000; }
+#oc93-preview-paper .osm-preview-page { position:relative; background:#fff; box-shadow:0 1px 5px #0003; }
+#oc93-preview-paper .osm-preview-page > :is(svg,canvas,[data-tab-index]) { position:absolute; display:block; }
+#oc93-preview-paper .preview-tab-active { outline:2px solid #1454b5; outline-offset:-2px; }
 #oc93-preview-status { margin:8px 12px; }

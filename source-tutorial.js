@@ -250,7 +250,7 @@ const tutorialSteps=[
   "editor",
   "#oc93-tab-creator",
   "Export fingering tabs",
-  "Choose Edit → Open tab editor, or select Tab editor beside Staff. Edit the diagrams, spacing, title, and credit. Press Play to follow the highlighted fingerings, or use Enter and the left or right arrow keys to hear one at a time. Hold Enter to sustain a note. Tabs matching the score use its timing. A different tab sequence plays one beat per note. Use File → Preview to watch the staff or tabs follow playback. Pause and press Play to resume. Use Save as PDF for a paginated fingering sheet. Save the score once to find it in Recent scores. Tab drafts save automatically in this browser, and changes appear in Edit history."
+  "Choose Edit → Open tab editor, or select Tab editor beside Staff. Edit the diagrams, spacing, title, and credit. Press Play to follow the highlighted fingerings, or use Enter and the left or right arrow keys to hear one at a time. Hold Enter to sustain a note. Tabs matching the score use its timing. A different tab sequence plays one beat per note. Use File → Preview to follow playback on the same pages as the PDF. The tab pages keep your spaces and line breaks. Pause and press Play to resume. Use Save as PDF for a paginated fingering sheet. Save the score once to find it in Recent scores. Tab drafts save automatically in this browser, and changes appear in Edit history."
  ],
  [
   "Export",

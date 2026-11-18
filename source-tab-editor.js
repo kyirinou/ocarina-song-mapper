@@ -189,33 +189,11 @@ find('native-tab-pdf').onclick=async()=>{
 const button=find('native-tab-pdf');button.disabled=true;
 try{
 const draft=nativeTabDraft();
+const filename=nativeTabFilename();
 await loadPDFExport();
-const pdf=new window.jspdf.jsPDF({unit:'pt',format:'a4'});
-pdf.setProperties({title:draft.title,author:draft.credit,keywords:'osm-tab-draft-v1:'+encodeURIComponent(draft.text)});
-const margin=32,width=pdf.internal.pageSize.getWidth()-2*margin;
-const bottom=pdf.internal.pageSize.getHeight()-margin;
-let y=margin;
-for(const [value,fontSize] of [[draft.title,20],[draft.credit,11]]){
-if(!value.trim())continue;
-pdf.setFontSize(fontSize);
-for(const line of pdf.splitTextToSize(value,width)){
-if(y+fontSize*1.25>bottom){pdf.addPage();y=margin;}
-pdf.text(line,margin,y+fontSize);
-y+=fontSize*1.25;
-}
-y+=6;
-}
-const rowHeight=Number(draft.size)+8;
-const rows=nativeTabRows(draft.text,Math.max(1,Math.floor(width/Number(draft.size))));
-for(let start=0;start<rows.length;){
-if(y+rowHeight>bottom){pdf.addPage();y=margin;}
-const count=Math.floor((bottom-y)/rowHeight);
-const pageRows=rows.slice(start,start+count);
-const art=nativeTabArtwork({rows:pageRows,heading:false,indexed:false});
-await pdf.svg(art.svg,{x:margin,y,width:art.width,height:art.height});
-start+=pageRows.length;y+=art.height;
-}
-pdf.save(nativeTabFilename()+'.pdf');
+const pages=await tabPaper(draft);
+await saveScorePaper(pages, {title:draft.title,author:draft.credit,
+  keywords:'osm-tab-draft-v1:'+encodeURIComponent(draft.text)},filename);
 }catch(error){nativeTabStatus.textContent=error.message;}
 finally{button.disabled=false;}
 };
