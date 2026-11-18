@@ -17,7 +17,7 @@ if(typeof value?.text==='string')return value;
 return null;
 }
 function nativeTabDraft(){
-return {text:nativeTabText.value,title:nativeTabTitle.value,credit:nativeTabCredit.value,size:nativeTabSize.value,activity:nativeTabActivity};
+return {text:nativeTabText.value,title:nativeTabTitle.value,credit:nativeTabCredit.value,size:nativeTabSize.value,paperLayouts,activity:nativeTabActivity};
 }
 function saveNativeTabDraft(label){
 if(nativeTabProject===null)return;
@@ -27,14 +27,16 @@ nativeTabActivity=[...nativeTabActivity,{label,at:new Date(now).toISOString()}].
 }
 if(label)lastTabEdit={label,time:now};
 initialTabDraft=nativeTabDraft();
+let saved=true;
 try{
 localStorage.setItem(nativeTabKey(nativeTabProject),JSON.stringify(initialTabDraft));
 nativeTabStatus.textContent=projects.some(project=>project.id===nativeTabProject)
   ?'Tab draft saved in this browser.'
   :'Save the score to reopen this draft from Recent scores.';
-}catch{nativeTabStatus.textContent='Save the score or download the tabs to keep a copy.';}
+}catch{saved=false;nativeTabStatus.textContent='Browser storage is full or unavailable. Download a project backup to keep these changes.';}
 renderScoreActivity();
 updatePlaybackAvailability();
+return saved;
 }
 function updateNativeTabStyle(){
 nativeTabText.parentElement.style.setProperty('--native-tab-size',nativeTabSize.value+'px');
@@ -47,11 +49,17 @@ return;
 nativeTabProject=projectId;
 tabStepIndex=-1;
 const draft=readNativeTabDraft(projectId)??initialTabDraft;
+loadPaperLayouts(draft?.paperLayouts);
 const sequence=score.pitches.map(fingeringCode).join('');
 nativeTabText.value=draft?.text??defaultTabLayout(sequence);
 nativeTabTitle.value=draft?.title||projectName.value.trim()||'Untitled song';
 nativeTabCredit.value=draft?.credit??authorInput.value.trim();
-nativeTabSize.value=['36','52','68'].includes(draft?.size)?draft.size:'52';
+const size=String(paperNumber(draft?.size,52,12,160));
+nativeTabSize.querySelector('[data-custom]')?.remove();
+if(![...nativeTabSize.options].some(option=>option.value===size)){
+const custom=new Option(size+' pt',size);custom.dataset.custom='';nativeTabSize.add(custom);
+}
+nativeTabSize.value=size;
 nativeTabActivity=Array.isArray(draft?.activity)?draft.activity:[];
 lastTabEdit=null;
 updateNativeTabStyle();
@@ -107,7 +115,7 @@ field.addEventListener('input',()=>{
   saveNativeTabDraft(label);
 });
 }
-nativeTabSize.onchange=()=>{updateNativeTabStyle();saveNativeTabDraft('Changed tab diagram size');};
+nativeTabSize.onchange=()=>{paperLayouts.tabs.tabSize=null;updateNativeTabStyle();saveNativeTabDraft('Changed tab diagram size');};
 find('native-tab-save-score').onclick=()=>find('save').click();
 for(const [label,code] of [
 ...Array.from({length:21},(_,i)=>[name(i+69),fingeringCode(i+69)]),

@@ -1,5 +1,6 @@
 find('pdf').addEventListener('click',async()=>{
 if(!score.events.length){report('Add notes before exporting a PDF.');return;}
+openNativeTabEditor();
 const button=find('pdf');
 const title=projectName.value.trim()||'Untitled song';
 const credit=authorInput.value.trim();

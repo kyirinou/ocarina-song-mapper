@@ -9,7 +9,7 @@ Ocarina Song Mapper (or OSM for short) is a versitile tool to help you learn and
 ## Features!! (Including but not limited to)
 
 - **Build and edit scores.**
-  Start with a blank score, paste note names such as `A4 - D#5 - C5 - F6`, or import supported ABC, MIDI, or MusicXML. Click a note card to hear it. Edit pitches and durations, insert or reorder notes, or audition replacements with **Swap note**.
+  Start with a blank score, paste note names such as `A4 - D#5 - C5 - F6`, or import supported ABC, MIDI, or MusicXML. Click a note card to hear it. Edit pitches and durations, insert or reorder notes, or audition replacements with **Swap note**. In **Add notes → View more**, open any octave from C0 to G9. Pitches outside A4–F6 appear in yellow and can be transposed.
 
 - **Work in the score editor.**
   Switch between Staff, Tab editor, and Note sequence. Zoom in, select notes to edit in the inspector, and follow the highlights during playback.
@@ -34,10 +34,13 @@ Ocarina Song Mapper (or OSM for short) is a versitile tool to help you learn and
 - **Upload your own ocarina fingering tabs.** Add a PNG, JPG, or PDF. OSM uses open and covered holes to identify supported fingerings, or reads numbered pitch labels from an OSM PDF. Review the detected pitches before opening them as a score or playing them in **Practice**. If an image layout is unfamiliar, **Teach this layout** lets you label each distinct fingering once. Imported notes start at one beat each.
 
 - **Play back and record rhythm**
-Press Enter to step through a score and hold it to sustain a note. Use **Play all** to hear the full rhythm while the notation highlights in sync. Change the playback speed, loop a song, or pause and resume. Use **File → Preview** to follow playback on the same pages that appear in the staff or fingering PDF. Record the intervals between Enter taps and apply either the exact timing or the edited notation durations.
+Press Enter to step through a score and hold it to sustain a note. Use **Play all** to hear the full rhythm while the notation highlights in sync. Change the playback speed, loop a song, or pause and resume. Use **View → Preview** to follow playback on the same pages that appear in the staff or fingering PDF. Record the intervals between Enter taps and apply either the exact timing or the edited notation durations.
 
 - **Edit and play fingering tabs.**
   Open **Tab editor** beside **Staff** or choose **Edit → Open tab editor**. Change fingerings, spacing, title, and credit, then press **Play** to follow the highlighted diagrams. Use Enter and the arrow keys to hear individual fingerings, including in uploaded tabs. Hold Enter to sustain the note. Save the score once to reopen it from **Recent scores**. Spaces and line breaks carry through to Preview and PDF. Tab drafts then save automatically in the same browser, and changes appear in **Edit history**.
+
+- **Design your printed pages.**
+  Open **View → Preview** for the page editor. Choose fonts, sizes, alignment, paper size, and margins. Resize fingering diagrams, add text boxes, images, and watermarks, and adjust opacity, rotation, layers, and repeated objects. Drag or resize objects on the page. Layout undo/redo, project saving, and PDF export retain your formatting. Staff and fingering pages keep their own layouts.
 
 - **Export music and fingering tabs.**
   Use **File → Export** for ABC, MusicXML, score PDF, or a project backup. Use **Save as PDF** inside the Tab editor for fingering sheets. The Tab editor also exports text and SVG.

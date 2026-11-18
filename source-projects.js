@@ -57,7 +57,7 @@ return {id:projectId,title:projectName.value.trim()||'Untitled song',author:auth
 lengths:[...score.lengths],tempo:score.tempo,tempoMap:score.tempoMap.map(mark=>({...mark})),meter:score.meter,key:score.key,intervals:Array.from(score.intervals,n=>n??null),
 performance:score.events.map(({velocity,muted})=>({velocity,muted})),
 activity:scoreActivity.slice(),
-tabDraft:readNativeTabDraft(projectId)??initialTabDraft};
+tabDraft:nativeTabProject===projectId?nativeTabDraft():readNativeTabDraft(projectId)??initialTabDraft};
 }
 function validProject(project){return ScoreModel.validate(project);}
 function restoreSavedProjects(){

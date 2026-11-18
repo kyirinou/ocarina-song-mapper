@@ -611,7 +611,7 @@ return {id:projectId,title:projectName.value.trim()||'Untitled song',author:auth
 lengths:[...score.lengths],tempo:score.tempo,tempoMap:score.tempoMap.map(mark=>({...mark})),meter:score.meter,key:score.key,intervals:Array.from(score.intervals,n=>n??null),
 performance:score.events.map(({velocity,muted})=>({velocity,muted})),
 activity:scoreActivity.slice(),
-tabDraft:readNativeTabDraft(projectId)??initialTabDraft};
+tabDraft:nativeTabProject===projectId?nativeTabDraft():readNativeTabDraft(projectId)??initialTabDraft};
 }
 function validProject(project){return ScoreModel.validate(project);}
 function restoreSavedProjects(){
@@ -1029,6 +1029,7 @@ find('apply-raw').addEventListener('click',()=>applyTake(true));
 
 find('pdf').addEventListener('click',async()=>{
 if(!score.events.length){report('Add notes before exporting a PDF.');return;}
+openNativeTabEditor();
 const button=find('pdf');
 const title=projectName.value.trim()||'Untitled song';
 const credit=authorInput.value.trim();
@@ -1091,7 +1092,7 @@ if(typeof value?.text==='string')return value;
 return null;
 }
 function nativeTabDraft(){
-return {text:nativeTabText.value,title:nativeTabTitle.value,credit:nativeTabCredit.value,size:nativeTabSize.value,activity:nativeTabActivity};
+return {text:nativeTabText.value,title:nativeTabTitle.value,credit:nativeTabCredit.value,size:nativeTabSize.value,paperLayouts,activity:nativeTabActivity};
 }
 function saveNativeTabDraft(label){
 if(nativeTabProject===null)return;
@@ -1101,14 +1102,16 @@ nativeTabActivity=[...nativeTabActivity,{label,at:new Date(now).toISOString()}].
 }
 if(label)lastTabEdit={label,time:now};
 initialTabDraft=nativeTabDraft();
+let saved=true;
 try{
 localStorage.setItem(nativeTabKey(nativeTabProject),JSON.stringify(initialTabDraft));
 nativeTabStatus.textContent=projects.some(project=>project.id===nativeTabProject)
   ?'Tab draft saved in this browser.'
   :'Save the score to reopen this draft from Recent scores.';
-}catch{nativeTabStatus.textContent='Save the score or download the tabs to keep a copy.';}
+}catch{saved=false;nativeTabStatus.textContent='Browser storage is full or unavailable. Download a project backup to keep these changes.';}
 renderScoreActivity();
 updatePlaybackAvailability();
+return saved;
 }
 function updateNativeTabStyle(){
 nativeTabText.parentElement.style.setProperty('--native-tab-size',nativeTabSize.value+'px');
@@ -1121,11 +1124,17 @@ return;
 nativeTabProject=projectId;
 tabStepIndex=-1;
 const draft=readNativeTabDraft(projectId)??initialTabDraft;
+loadPaperLayouts(draft?.paperLayouts);
 const sequence=score.pitches.map(fingeringCode).join('');
 nativeTabText.value=draft?.text??defaultTabLayout(sequence);
 nativeTabTitle.value=draft?.title||projectName.value.trim()||'Untitled song';
 nativeTabCredit.value=draft?.credit??authorInput.value.trim();
-nativeTabSize.value=['36','52','68'].includes(draft?.size)?draft.size:'52';
+const size=String(paperNumber(draft?.size,52,12,160));
+nativeTabSize.querySelector('[data-custom]')?.remove();
+if(![...nativeTabSize.options].some(option=>option.value===size)){
+const custom=new Option(size+' pt',size);custom.dataset.custom='';nativeTabSize.add(custom);
+}
+nativeTabSize.value=size;
 nativeTabActivity=Array.isArray(draft?.activity)?draft.activity:[];
 lastTabEdit=null;
 updateNativeTabStyle();
@@ -1181,7 +1190,7 @@ field.addEventListener('input',()=>{
   saveNativeTabDraft(label);
 });
 }
-nativeTabSize.onchange=()=>{updateNativeTabStyle();saveNativeTabDraft('Changed tab diagram size');};
+nativeTabSize.onchange=()=>{paperLayouts.tabs.tabSize=null;updateNativeTabStyle();saveNativeTabDraft('Changed tab diagram size');};
 find('native-tab-save-score').onclick=()=>find('save').click();
 for(const [label,code] of [
 ...Array.from({length:21},(_,i)=>[name(i+69),fingeringCode(i+69)]),
@@ -1285,55 +1294,162 @@ nativeTabText.addEventListener('pointerdown',()=>{
 if(!melody&&nativeTabText.readOnly)clearTabPlayback();
 });
 
-const scorePaper={width:595.28,height:841.89,margin:32};
-const scorePaperWidth=scorePaper.width-2*scorePaper.margin;
-const scorePaperHeight=scorePaper.height-2*scorePaper.margin;
-const paperMeasure=document.createElement('canvas').getContext('2d');
-
-function paperHeading(text,size){
-if(!text.trim())return [];
-const font=size+'px Helvetica, Arial, sans-serif';
-paperMeasure.font=font;
-const lines=[];
-let line='';
-for(const word of text.trim().split(/\s+/)){
-if(line&&paperMeasure.measureText(line+' '+word).width>scorePaperWidth){lines.push(line);line='';}
-if(paperMeasure.measureText(word).width<=scorePaperWidth){
-line+=(line?' ':'')+word;
-continue;
+const paperFonts=['Helvetica, Arial, sans-serif','Times New Roman, serif','Georgia, serif','Palatino, serif','Courier New, monospace'];
+function defaultPaperLayout(){
+return {format:'a4',orientation:'portrait',margin:32,lineSpacing:1.15,tabSize:null,extraPages:0,
+title:{font:paperFonts[0],size:22,align:'left',bold:false,italic:false,color:'#000000',dx:0,dy:0},
+credit:{font:paperFonts[0],size:12,align:'left',bold:false,italic:false,color:'#000000',dx:0,dy:0},
+objects:[]};
 }
+function paperNumber(value,fallback,min,max){
+return Number.isFinite(Number(value))?Math.max(min,Math.min(max,Number(value))):fallback;
+}
+function cleanPaperLayout(value){
+const layout=defaultPaperLayout();
+if(!value||typeof value!=='object')return layout;
+layout.format=['a4','letter','a3'].includes(value.format)?value.format:'a4';
+layout.orientation=value.orientation==='landscape'?'landscape':'portrait';
+layout.margin=paperNumber(value.margin,32,12,120);
+layout.lineSpacing=paperNumber(value.lineSpacing,1.15,1,3);
+layout.tabSize=value.tabSize==null?null:paperNumber(value.tabSize,52,12,160);
+layout.extraPages=Math.round(paperNumber(value.extraPages,0,0,50));
+for(const key of ['title','credit']){
+const style=value[key]??{};
+Object.assign(layout[key],{
+font:paperFonts.includes(style.font)?style.font:paperFonts[0],size:paperNumber(style.size,key==='title'?22:12,6,120),
+align:['left','center','right'].includes(style.align)?style.align:'left',bold:style.bold===true,italic:style.italic===true,
+color:/^#[\da-f]{6}$/i.test(style.color)?style.color:'#000000',dx:paperNumber(style.dx,0,-600,600),dy:paperNumber(style.dy,0,-800,800)});
+}
+layout.objects=(Array.isArray(value.objects)?value.objects:[]).filter(object=>object&&['text','image'].includes(object.type)).map(object=>({
+id:typeof object.id==='string'?object.id:newId(),type:object.type,
+text:typeof object.text==='string'?object.text:'',
+src:typeof object.src==='string'&&/^data:image\/(png|jpeg|webp);base64,/.test(object.src)?object.src:'',
+x:paperNumber(object.x,48,0,1190),y:paperNumber(object.y,100,0,1190),
+width:paperNumber(object.width,200,12,1190),height:paperNumber(object.height,80,12,1190),
+page:Math.round(paperNumber(object.page,1,1,1000)),repeat:object.repeat===true,
+opacity:paperNumber(object.opacity,1,0,1),rotation:paperNumber(object.rotation,0,-180,180),
+font:paperFonts.includes(object.font)?object.font:paperFonts[0],size:paperNumber(object.size,16,6,120),
+align:['left','center','right'].includes(object.align)?object.align:'left',bold:object.bold===true,italic:object.italic===true,
+color:/^#[\da-f]{6}$/i.test(object.color)?object.color:'#000000',
+layer:object.layer==='background'?'background':'foreground',locked:object.locked===true
+})).filter(object=>object.type!=='image'||object.src);
+return layout;
+}
+let paperLayouts={tabs:defaultPaperLayout(),staff:defaultPaperLayout()};
+function loadPaperLayouts(saved){
+paperLayouts={tabs:cleanPaperLayout(saved?.tabs),staff:cleanPaperLayout(saved?.staff)};
+}
+function paperGeometry(layout){
+let [width,height]=({a4:[595.28,841.89],letter:[612,792],a3:[841.89,1190.55]})[layout.format];
+if(layout.orientation==='landscape')[width,height]=[height,width];
+return {width,height,margin:layout.margin,contentWidth:width-2*layout.margin,contentHeight:height-2*layout.margin};
+}
+function paperFont(style){
+return (style.italic?'italic ':'')+(style.bold?'bold ':'')+style.size+'px '+style.font;
+}
+const paperImages=new Map();
+function paperImage(src){
+if(!paperImages.has(src))paperImages.set(src,new Promise((resolve,reject)=>{
+const image=new Image();image.onload=()=>resolve(image);image.onerror=()=>reject(Error('An image in this layout could not be opened.'));
+image.src=src;
+}));
+return paperImages.get(src);
+}
+function wrappedPaperText(text,width,style){
+paperMeasure.font=paperFont(style);
+const lines=[];
+for(const paragraph of text.split('\n')){
+let line='';
+for(const word of paragraph.split(/\s+/)){
+if(line&&paperMeasure.measureText(line+' '+word).width>width){lines.push(line);line='';}
+if(paperMeasure.measureText(word).width<=width){line+=(line?' ':'')+word;continue;}
 for(const letter of word){
-if(line&&paperMeasure.measureText(line+letter).width>scorePaperWidth){lines.push(line);line='';}
+if(line&&paperMeasure.measureText(line+letter).width>width){lines.push(line);line='';}
 line+=letter;
 }
 }
-if(line)lines.push(line);
+lines.push(line);
+}
+return lines;
+}
+function drawPaperText(context,text,width,height,style){
+context.font=paperFont(style);context.fillStyle=style.color;context.textAlign=style.align;
+const x=style.align==='right'?width:style.align==='center'?width/2:0;
+for(const [index,line] of wrappedPaperText(text,width,style).entries()){
+const y=style.size+index*style.size*1.25;
+if(y>height)break;
+context.fillText(line,x,y);
+}
+}
+function paperObjectsForPage(layout,page,layer){
+return layout.objects.filter(object=>(object.repeat||object.page===page+1)&&object.layer===layer);
+}
+async function paintPaperObject(object,resolution){
+const image=object.type==='image'?await paperImage(object.src):null;
+const canvas=document.createElement('canvas');
+canvas.width=Math.ceil(object.width*resolution);canvas.height=Math.ceil(object.height*resolution);
+const context=canvas.getContext('2d');
+context.scale(canvas.width/object.width,canvas.height/object.height);
+if(image)context.drawImage(image,0,0,object.width,object.height);
+else drawPaperText(context,object.text,object.width,object.height,object);
+return canvas;
+}
+async function paintPaperObjects(layout,paper,page,layer,resolution){
+const objects=paperObjectsForPage(layout,page,layer);
+if(!objects.length)return null;
+const images=await Promise.all(objects.map(object=>object.type==='image'?paperImage(object.src):null));
+const canvas=document.createElement('canvas');
+canvas.width=Math.ceil(paper.width*resolution);canvas.height=Math.ceil(paper.height*resolution);
+const context=canvas.getContext('2d');
+context.scale(canvas.width/paper.width,canvas.height/paper.height);
+objects.forEach((object,index)=>{
+context.save();context.globalAlpha=object.opacity;
+context.translate(object.x+object.width/2,object.y+object.height/2);context.rotate(object.rotation*Math.PI/180);
+context.translate(-object.width/2,-object.height/2);
+context.beginPath();context.rect(0,0,object.width,object.height);context.clip();
+if(images[index])context.drawImage(images[index],0,0,object.width,object.height);
+else drawPaperText(context,object.text,object.width,object.height,object);
+context.restore();
+});
+return canvas;
+}
+
+const paperMeasure=document.createElement('canvas').getContext('2d');
+
+function paperHeading(text,key,style,paper){
+if(!text.trim())return [];
+const lines=wrappedPaperText(text,paper.contentWidth,style);
 return lines.map((line,i)=>{
-const height=size*1.25+(i===lines.length-1?8:0);
+const height=style.size*1.25+(i===lines.length-1?8:0);
 const svg=document.createElementNS(svgNS,'svg');
-svg.setAttribute('width',scorePaperWidth);svg.setAttribute('height',height);
-rhythmShape(svg,'text',{x:0,y:size,'font-size':size,'font-family':'Helvetica, Arial, sans-serif',fill:'#000'});
+svg.setAttribute('width',paper.contentWidth);svg.setAttribute('height',height);
+const x=style.align==='center'?paper.contentWidth/2:style.align==='right'?paper.contentWidth:0;
+rhythmShape(svg,'text',{x,y:style.size,'font-size':style.size,'font-family':style.font,
+'font-weight':style.bold?'bold':'normal','font-style':style.italic?'italic':'normal',
+'text-anchor':style.align==='center'?'middle':style.align==='right'?'end':'start',fill:style.color});
 svg.lastChild.textContent=line;
-return {svg,width:scorePaperWidth,height};
+return {svg,width:paper.contentWidth,height,heading:key,style,text:line,dx:style.dx,dy:style.dy};
 });
 }
 
-function paginateScorePaper(blocks){
-const pages=[[]];
-let y=scorePaper.margin;
+function paginateScorePaper(blocks,layout){
+const paper=paperGeometry(layout),pages=[[]];
+let y=paper.margin;
 for(const block of blocks){
-if(y>scorePaper.margin&&y+block.height>scorePaper.height-scorePaper.margin+.001){
-pages.push([]);y=scorePaper.margin;
-}
+if(y>paper.margin&&y+block.height>paper.height-paper.margin+.001){pages.push([]);y=paper.margin;}
 pages.at(-1).push({...block,y});
 y+=block.height;
 }
+const lastObjectPage=layout.objects.reduce((max,object)=>Math.max(max,object.repeat?1:object.page),1);
+const count=Math.max(pages.length+layout.extraPages,lastObjectPage);
+while(pages.length<count)pages.push([]);
+pages.paper=paper;pages.layout=layout;
 return pages;
 }
 
-async function staffPaper(title,credit,entries,bpm){
+async function staffPaper(title,credit,entries,bpm,layout=structuredClone(paperLayouts.staff)){
 await loadNotation();
-const staging=document.createElement('div');
+const paper=paperGeometry(layout),staging=document.createElement('div');
 staging.setAttribute('aria-hidden','true');
 staging.style.cssText='position:fixed;top:0;left:-10000px;width:760px;pointer-events:none';
 document.body.append(staging);
@@ -1348,19 +1464,20 @@ const view=svg.viewBox.baseVal;
 const width=view.width||parseFloat(svg.getAttribute('width'));
 const height=view.height||parseFloat(svg.getAttribute('height'));
 if(!(width>0&&height>0))throw Error('A staff line has no printable dimensions.');
-const scale=Math.min(scorePaperWidth/width,scorePaperHeight/height);
+const scale=Math.min(paper.contentWidth/width,paper.contentHeight/height);
 const printedWidth=width*scale,printedHeight=height*scale;
 if(!view.width||!view.height)svg.setAttribute('viewBox','0 0 '+width+' '+height);
 svg.setAttribute('width',printedWidth);svg.setAttribute('height',printedHeight);
 const notes=[...svg.querySelectorAll('.abcjs-note,.abcjs-rest')].map(node=>[glyphIndexes[glyphIndex++],node]);
-return {svg,width:printedWidth,svgHeight:printedHeight,height:Math.min(scorePaperHeight,printedHeight+6),notes};
+return {svg,width:printedWidth,svgHeight:printedHeight,height:Math.min(paper.contentHeight,printedHeight+6),notes};
 });
-return paginateScorePaper([...paperHeading(title,22),...paperHeading(credit,12),...blocks]);
+return paginateScorePaper([...paperHeading(title,'title',layout.title,paper),...paperHeading(credit,'credit',layout.credit,paper),...blocks],layout);
 }finally{staging.remove();}
 }
 
 async function tabPaper(draft){
-const size=Number(draft.size),rowHeight=size*1.15, font=size+'px OcarinaFingering, monospace';
+const layout=cleanPaperLayout(draft.paperLayouts?.tabs??paperLayouts.tabs),paper=paperGeometry(layout);
+const size=layout.tabSize??Number(draft.size),rowHeight=size*layout.lineSpacing,font=size+'px OcarinaFingering, monospace';
 await document.fonts.load(font,'A');
 paperMeasure.font=font;
 const metrics=paperMeasure.measureText('A'),tabWidth=paperMeasure.measureText(' ').width*4;
@@ -1382,48 +1499,60 @@ return {text,x};
 widest=Math.max(widest,width);
 return {segments,notes};
 });
-// Keep the spacing between notes when fitting long, manually arranged rows to paper.
-const scale=Math.min(1,scorePaperWidth/Math.max(1,widest));
+// Preserve manually arranged rows when fitting them to the chosen paper.
+const scale=Math.min(1,paper.contentWidth/Math.max(1,widest),paper.contentHeight/rowHeight);
 const blocks=rows.map(({segments,notes})=>({
 segments,font,scale,baseline,height:rowHeight*scale,noteWidth:size*scale,
 notes:notes.map(note=>({...note,x:note.x*scale}))
 }));
-return paginateScorePaper([...paperHeading(draft.title,22),...paperHeading(draft.credit,12),...blocks]);
+return paginateScorePaper([...paperHeading(draft.title,'title',layout.title,paper),...paperHeading(draft.credit,'credit',layout.credit,paper),...blocks],layout);
 }
 
-function paintTabPage(blocks,resolution){
+function paintTabPage(blocks,resolution,paper){
 const rows=blocks.filter(block=>block.segments);
 if(!rows.length)return null;
-const top=rows[0].y-4;
-const height=rows.at(-1).y+rows.at(-1).height-top+4;
+const top=rows[0].y-4,height=rows.at(-1).y+rows.at(-1).height-top+4;
 const canvas=document.createElement('canvas');
-canvas.width=Math.ceil(scorePaperWidth*resolution);
-canvas.height=Math.ceil(height*resolution);
-const context=canvas.getContext('2d',{alpha:false});
-context.scale(canvas.width/scorePaperWidth,canvas.height/height);
-context.fillStyle='#fff';
-context.fillRect(0,0,scorePaperWidth,height);
+canvas.width=Math.ceil(paper.contentWidth*resolution);canvas.height=Math.ceil(height*resolution);
+const context=canvas.getContext('2d');
+context.scale(canvas.width/paper.contentWidth,canvas.height/height);
 context.fillStyle='#000';
 for(const row of rows){
 context.save();
-context.translate(0,row.y-top);context.scale(row.scale,row.scale);
-context.font=row.font;
+context.translate(0,row.y-top);context.scale(row.scale,row.scale);context.font=row.font;
 for(const {text,x} of row.segments)context.fillText(text,x,row.baseline);
 context.restore();
 }
 return {canvas,top,height};
 }
 
+function paintPaperHeading(block,resolution){
+const canvas=document.createElement('canvas');
+canvas.width=Math.ceil(block.width*resolution);canvas.height=Math.ceil(block.height*resolution);
+const context=canvas.getContext('2d');context.scale(canvas.width/block.width,canvas.height/block.height);
+drawPaperText(context,block.text,block.width,block.height,block.style);
+return canvas;
+}
+
 async function saveScorePaper(pages,properties,filename){
-const pdf=new window.jspdf.jsPDF({unit:'pt',format:[scorePaper.width,scorePaper.height],compress:true});
+const paper=pages.paper,layout=pages.layout;
+const pdf=new window.jspdf.jsPDF({unit:'pt',format:[paper.width,paper.height],
+orientation:paper.width>paper.height?'landscape':'portrait',compress:true});
 pdf.setProperties(properties);
 for(const [index,blocks] of pages.entries()){
 if(index)pdf.addPage();
-for(const {svg,width,height,svgHeight,y} of blocks){
-if(svg)await pdf.svg(svg,{x:scorePaper.margin,y,width,height:svgHeight??height});
+const background=await paintPaperObjects(layout,paper,index,'background',3);
+if(background)pdf.addImage(background,'PNG',0,0,paper.width,paper.height);
+for(const block of blocks){
+const {svg,width,height,svgHeight,y}=block;
+if(block.heading){
+pdf.addImage(paintPaperHeading(block,3),'PNG',paper.margin+block.dx,y+block.dy,width,height);
+}else if(svg)await pdf.svg(svg,{x:paper.margin,y,width,height:svgHeight??height});
 }
-const tabs=paintTabPage(blocks,4);
-if(tabs)pdf.addImage(tabs.canvas,'PNG',scorePaper.margin,tabs.top,scorePaperWidth,tabs.height);
+const tabs=paintTabPage(blocks,4,paper);
+if(tabs)pdf.addImage(tabs.canvas,'PNG',paper.margin,tabs.top,paper.contentWidth,tabs.height);
+const foreground=await paintPaperObjects(layout,paper,index,'foreground',3);
+if(foreground)pdf.addImage(foreground,'PNG',0,0,paper.width,paper.height);
 }
 pdf.save(filename+'.pdf');
 }
@@ -1432,69 +1561,95 @@ const scorePreview=find('score-preview');
 const previewKind=find('preview-kind');
 const previewPaper=find('preview-paper');
 const previewScroll=find('preview-scroll');
-let previewNotes=[],previewActive=[],previewRequest=0;
+let previewNotes=[],previewActive=[],previewRequest=0,previewPages=null,previewSaveWarning='';
 
 function fitScorePreview(){
-if(!scorePreview.open)return;
-const gutters=24;
-previewPaper.style.zoom=String(Math.max(.1,Math.min(1.25,(previewScroll.clientWidth-gutters)/scorePaper.width,
-  (previewScroll.clientHeight-gutters)/scorePaper.height)));
+if(!scorePreview.open||!previewPages)return;
+const zoom=find('preview-zoom').value,paper=previewPages.paper;
+const fitted=Math.min(1.25,(previewScroll.clientWidth-24)/paper.width,(previewScroll.clientHeight-24)/paper.height);
+previewPaper.style.zoom=String(zoom==='fit'?Math.max(.1,fitted):Number(zoom));
 }
 
-function drawPreviewPage(blocks){
+async function drawPreviewPage(blocks,index,pages,noteGroups){
+const {paper,layout}=pages;
 const page=document.createElement('div');
-page.className='osm-preview-page';
-page.style.width=scorePaper.width+'px';page.style.height=scorePaper.height+'px';
-const tabs=paintTabPage(blocks,2);
+page.className='osm-preview-page';page.dataset.page=index+1;
+page.style.width=paper.width+'px';page.style.height=paper.height+'px';
+const tabs=paintTabPage(blocks,2,paper);
 if(tabs){
-tabs.canvas.style.top=tabs.top+'px';tabs.canvas.style.left=scorePaper.margin+'px';
-tabs.canvas.style.width=scorePaperWidth+'px';tabs.canvas.style.height=tabs.height+'px';
+tabs.canvas.style.top=tabs.top+'px';tabs.canvas.style.left=paper.margin+'px';
+tabs.canvas.style.width=paper.contentWidth+'px';tabs.canvas.style.height=tabs.height+'px';
+tabs.canvas.className='osm-paper-content';
 page.append(tabs.canvas);
 }
-for(const {svg,notes,y,height,noteWidth} of blocks){
+for(const block of blocks){
+const {svg,notes,y,height,noteWidth}=block;
 if(svg){
-svg.style.top=y+'px';svg.style.left=scorePaper.margin+'px';
-page.append(svg);
-for(const [index,node] of notes??[]){
-if(index!==undefined)(previewNotes[index]??=[]).push(node);
+svg.style.top=y+(block.dy??0)+'px';svg.style.left=paper.margin+(block.dx??0)+'px';
+svg.classList.add('osm-paper-content');page.append(svg);
+if(block.heading){
+svg.dataset.heading=block.heading;svg.classList.add('osm-paper-heading');svg.style.cursor='move';
+}
+for(const [noteIndex,node] of notes??[]){
+if(noteIndex!==undefined)(noteGroups[noteIndex]??=[]).push(node);
 }
 }else{
 for(const note of notes){
 const cell=document.createElement('span');
 cell.dataset.tabIndex=note.index;
-cell.style.left=scorePaper.margin+note.x+'px';cell.style.top=y+'px';
+cell.style.left=paper.margin+note.x+'px';cell.style.top=y+'px';
 cell.style.width=noteWidth+'px';cell.style.height=height+'px';
-page.append(cell);
-previewNotes[note.index]=[cell];
+cell.className='osm-paper-content';page.append(cell);
+noteGroups[note.index]=[cell];
 }
 }
+}
+for(const object of layout.objects.filter(object=>object.repeat||object.page===index+1)){
+const handle=document.createElement('div');
+handle.className='osm-paper-object';handle.dataset.objectId=object.id;
+handle.setAttribute('aria-label',object.type==='image'?'Image':object.text||'Text box');
+handle.tabIndex=0;
+handle.style.cssText='left:'+object.x+'px;top:'+object.y+'px;width:'+object.width+'px;height:'+object.height+'px;transform:rotate('+object.rotation+'deg)';
+handle.classList.add('osm-object-'+object.layer);
+const artwork=await paintPaperObject(object,2);
+artwork.style.opacity=object.opacity;handle.append(artwork);
+if(!object.locked){
+const resize=document.createElement('span');resize.className='osm-paper-resize';resize.dataset.resize='true';handle.append(resize);
+}
+page.append(handle);
 }
 return page;
 }
 
-async function drawScorePreview(){
-const request=++previewRequest;
-const tabView=previewKind.value==='tabs';
+async function drawScorePreview(preserve=false){
+const request=++previewRequest,tabView=previewKind.value==='tabs';
 const status=find('preview-status'),playButton=find('preview-play');
-previewPaper.replaceChildren();
-previewNotes=[];previewActive=[];
-playButton.disabled=true;
-status.hidden=true;
-const draft=tabView?nativeTabDraft():null;
+const scrollTop=previewScroll.scrollTop,scrollLeft=previewScroll.scrollLeft;
+previewPaper.replaceChildren();previewNotes=[];previewActive=[];
+playButton.disabled=true;status.textContent='Preparing pages…';
+const draft=tabView?structuredClone(nativeTabDraft()):null;
 const title=tabView?draft.title.trim():projectName.value.trim()||'Untitled song';
-find('score-preview-title').textContent=title||'Untitled score';
+find('score-preview-title').textContent=(title||'Untitled score')+' — Page editor';
 try{
 if(tabView&&!nativeTabNotes().length)throw Error('Add fingerings before previewing tabs.');
 if(!tabView&&!score.events.length)throw Error('Add notes before previewing the staff.');
 const pages=tabView?await tabPaper(draft):await staffPaper(title,authorInput.value.trim(),scoreEntries(),score.tempo);
+const elements=[],noteGroups=[];
+for(const [index,blocks] of pages.entries()){
 if(request!==previewRequest||!scorePreview.open)return;
-for(const blocks of pages)previewPaper.append(drawPreviewPage(blocks));
-fitScorePreview();
-previewScroll.scrollTo(0,0);
+elements.push(await drawPreviewPage(blocks,index,pages,noteGroups));
+}
+if(request!==previewRequest||!scorePreview.open)return;
+previewPages=pages;previewNotes=noteGroups;previewPaper.append(...elements);fitScorePreview();
+if(preserve)previewScroll.scrollTo(scrollLeft,scrollTop);else previewScroll.scrollTo(0,0);
+find('preview-page-count').textContent=pages.length+' '+(pages.length===1?'page':'pages');
+status.textContent=previewSaveWarning;
 playButton.disabled=false;
+updatePreviewObjectSelection();
+syncPreviewFields();
 }catch(error){
 if(request!==previewRequest||!scorePreview.open)return;
-status.textContent=error.message;status.hidden=false;
+status.textContent=error.message;
 }
 }
 
@@ -1512,19 +1667,293 @@ if(target.bottom>view.bottom-8||target.top<view.top+8)previewScroll.scrollTop+=t
 function openScorePreview(){
 stopMelody();openNativeTabEditor();
 previewKind.value=editorView==='tabs'?'tabs':'staff';
-scorePreview.showModal();drawScorePreview();
+previewPast.length=0;previewFuture.length=0;previewSelected=null;previewSaveWarning='';
+find('preview-zoom').value='fit';
+scorePreview.showModal();syncPreviewFields();drawScorePreview();
 }
-previewKind.onchange=()=>{stopMelody();drawScorePreview();};
-find('preview-play').onclick=()=>play(previewKind.value==='tabs');
+previewKind.onchange=()=>{
+stopMelody();previewPast.length=0;previewFuture.length=0;previewSelected=null;
+syncPreviewFields();drawScorePreview();
+};
+find('preview-zoom').onchange=fitScorePreview;
+find('preview-play').onclick=()=>{previewSelected=null;updatePreviewObjectSelection();play(previewKind.value==='tabs');};
 find('preview-pause').onclick=pauseMelody;
 find('preview-stop').onclick=stopMelody;
 scorePreview.addEventListener('close',()=>{
-previewRequest++;
-previewPaper.replaceChildren();
-previewNotes=[];previewActive=[];
+previewRequest++;previewPages=null;
+previewPaper.replaceChildren();previewNotes=[];previewActive=[];
 stopMelody();
 });
-window.addEventListener('resize',fitScorePreview);
+new ResizeObserver(fitScorePreview).observe(previewScroll);
+
+let previewSelected=null,previewDragging=null;
+const previewPast=[],previewFuture=[];
+const previewInspector=find('preview-inspector');
+function currentPaperLayout(){return paperLayouts[previewKind.value];}
+function selectedPaperObject(){return currentPaperLayout().objects.find(object=>object.id===previewSelected);}
+function previewEditState(){
+return {layout:structuredClone(currentPaperLayout()),title:previewKind.value==='tabs'?nativeTabTitle.value:projectName.value,
+credit:previewKind.value==='tabs'?nativeTabCredit.value:authorInput.value};
+}
+function setPreviewEditState(state){
+paperLayouts[previewKind.value]=structuredClone(state.layout);
+if(previewKind.value==='tabs'){nativeTabTitle.value=state.title;nativeTabCredit.value=state.credit;}
+else{projectName.value=state.title;authorInput.value=state.credit;draftChanged=true;updateWorkspace();}
+}
+function finishPreviewEdit(before,label){
+const after=previewEditState();
+if(JSON.stringify(before)===JSON.stringify(after))return;
+previewPast.push(before);
+if(previewPast.length>30)previewPast.shift();
+previewFuture.length=0;
+const saved=saveNativeTabDraft(label);
+previewSaveWarning=saved?'':nativeTabStatus.textContent;
+stopMelody();syncPreviewFields();drawScorePreview(true);
+}
+function changePreview(label,change){
+const before=previewEditState();change();
+paperLayouts[previewKind.value]=cleanPaperLayout(currentPaperLayout());
+finishPreviewEdit(before,label);
+}
+function previewUndo(redo=false){
+const from=redo?previewFuture:previewPast,to=redo?previewPast:previewFuture;
+if(!from.length)return;
+stopMelody();to.push(previewEditState());setPreviewEditState(from.pop());
+saveNativeTabDraft(redo?'Redid page formatting':'Undid page formatting');
+syncPreviewFields();drawScorePreview(true);
+}
+for(const field of scorePreview.querySelectorAll('[data-paper-font]')){
+for(const font of paperFonts)field.add(new Option(font.split(',')[0],font));
+}
+function syncPreviewFields(){
+const layout=currentPaperLayout(),heading=find('preview-heading').value;
+for(const field of scorePreview.querySelectorAll('[data-paper-field]')){
+field.value=layout[field.dataset.paperField]??Number(nativeTabSize.value);
+}
+find('preview-tab-controls').hidden=previewKind.value!=='tabs';
+find('preview-heading-text').value=previewKind.value==='tabs'
+  ?(heading==='title'?nativeTabTitle.value:nativeTabCredit.value)
+  :(heading==='title'?projectName.value:authorInput.value);
+for(const field of scorePreview.querySelectorAll('[data-heading-field]')){
+const value=layout[heading][field.dataset.headingField];
+if(field.type==='checkbox')field.checked=value;else field.value=value;
+}
+const selection=find('preview-object');
+selection.replaceChildren(new Option('None',''));
+for(const [i,object] of layout.objects.entries())selection.add(new Option(
+(object.type==='image'?'Image':object.text.trim().slice(0,25)||'Text box')+' · '+(i+1),object.id));
+const object=selectedPaperObject();
+if(!object)previewSelected=null;
+selection.value=previewSelected??'';
+find('preview-object-fields').hidden=!object;
+if(object){
+find('preview-object-text-wrap').hidden=object.type!=='text';
+find('preview-object-type').hidden=object.type!=='text';
+for(const field of scorePreview.querySelectorAll('[data-object-field]')){
+const key=field.dataset.objectField,value=object[key];
+if(field.type==='checkbox')field.checked=value;else field.value=key==='opacity'?Math.round(value*100):value;
+}
+}
+for(const button of scorePreview.querySelectorAll('[data-preview-command]')){
+const command=button.dataset.previewCommand;
+if(command==='undo')button.disabled=!previewPast.length;
+if(command==='redo')button.disabled=!previewFuture.length;
+if(['delete','duplicate','front','back'].includes(command))button.disabled=!object;
+}
+updatePreviewObjectSelection();
+}
+function updatePreviewObjectSelection(){
+for(const node of previewPaper.querySelectorAll('[data-object-id]'))node.classList.toggle('is-selected',node.dataset.objectId===previewSelected);
+}
+find('preview-heading').onchange=syncPreviewFields;
+find('preview-heading-text').onchange=event=>changePreview('Edited page title or author',()=>{
+const heading=find('preview-heading').value;
+if(previewKind.value==='tabs')(heading==='title'?nativeTabTitle:nativeTabCredit).value=event.target.value;
+else{(heading==='title'?projectName:authorInput).value=event.target.value;draftChanged=true;updateWorkspace();}
+});
+for(const field of scorePreview.querySelectorAll('[data-paper-field]'))field.onchange=()=>{
+if(field.type==='number'&&!field.reportValidity())return;
+changePreview('Changed page layout',()=>{currentPaperLayout()[field.dataset.paperField]=field.type==='number'?Number(field.value):field.value;});
+};
+for(const field of scorePreview.querySelectorAll('[data-heading-field]'))field.onchange=()=>{
+if(field.type==='number'&&!field.reportValidity())return;
+changePreview('Formatted title or author',()=>{
+currentPaperLayout()[find('preview-heading').value][field.dataset.headingField]=field.type==='checkbox'?field.checked:field.type==='number'?Number(field.value):field.value;
+});
+};
+find('preview-object').onchange=event=>{previewSelected=event.target.value||null;syncPreviewFields();};
+for(const field of scorePreview.querySelectorAll('[data-object-field]'))field.onchange=()=>{
+if(!selectedPaperObject()||(field.type==='number'&&!field.reportValidity()))return;
+changePreview('Edited page object',()=>{
+const key=field.dataset.objectField;
+selectedPaperObject()[key]=field.type==='checkbox'?field.checked:field.type==='number'?Number(field.value)/(key==='opacity'?100:1):field.value;
+});
+};
+function insertPaperObject(type,src='',ratio=1){
+changePreview(type==='image'?'Added page image':'Added page text',()=>{
+const layout=currentPaperLayout(),paper=paperGeometry(layout);
+const object=cleanPaperLayout({objects:[{id:newId(),type,src,text:type==='text'?'Your text':'',
+x:paper.margin,y:120,width:220,height:type==='image'?220/ratio:80,page:1}]}).objects[0];
+layout.objects.push(object);previewSelected=object.id;
+});
+}
+find('preview-image').onchange=async event=>{
+const file=event.target.files[0];event.target.value='';
+if(!file)return;
+const project=projectId,kind=previewKind.value;
+try{
+const src=await new Promise((resolve,reject)=>{
+const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(Error('This image could not be read.'));
+reader.readAsDataURL(file);
+});
+if(!/^data:image\/(png|jpeg|webp);base64,/.test(src))throw Error('Choose a PNG, JPEG, or WebP image.');
+const image=await paperImage(src);
+const canvas=document.createElement('canvas'),scale=Math.min(1,2400/Math.max(image.width,image.height));
+canvas.width=Math.max(1,Math.round(image.width*scale));canvas.height=Math.max(1,Math.round(image.height*scale));
+canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
+if(!scorePreview.open||project!==projectId||kind!==previewKind.value)return;
+insertPaperObject('image',canvas.toDataURL('image/png'),image.width/image.height);
+}catch(error){find('preview-status').textContent=error.message;}
+};
+async function exportPreviewPaper(){
+if(!previewPages||find('preview-play').disabled)return;
+try{
+const kind=previewKind.value,layout=structuredClone(currentPaperLayout());
+const draft=structuredClone(nativeTabDraft()),title=kind==='tabs'?draft.title:projectName.value;
+const credit=kind==='tabs'?draft.credit:authorInput.value;
+await loadPDFExport();
+const pages=kind==='tabs'?await tabPaper(draft):await staffPaper(title,credit,scoreEntries(),score.tempo,layout);
+await saveScorePaper(pages,{title,author:credit,...(kind==='tabs'?{keywords:'osm-tab-draft-v1:'+encodeURIComponent(draft.text)}:{})},
+(title||'Ocarina score').replace(/[\\/:*?"<>|]/g,'-'));
+find('preview-status').textContent='PDF exported.';
+}catch(error){find('preview-status').textContent=error.message;}
+}
+async function previewCommand(command){
+if(command==='undo'||command==='redo'){previewUndo(command==='redo');return;}
+if(command==='export'){await exportPreviewPaper();return;}
+if(command==='save'){find('save').click();find('preview-status').textContent=projectStatus.textContent;return;}
+if(command==='backup'){find('backup').click();return;}
+if(command==='close'){scorePreview.close();return;}
+if(command==='tabs'||command==='staff'){previewKind.value=command;previewKind.onchange();return;}
+if(command==='fit'||command==='actual'){find('preview-zoom').value=command==='fit'?'fit':'1';fitScorePreview();return;}
+if(command==='inspector'){previewInspector.hidden=!previewInspector.hidden;return;}
+if(command==='image'){find('preview-image').click();return;}
+if(command==='text'){insertPaperObject('text');return;}
+if(command==='watermark'){
+changePreview('Added watermark',()=>{
+const paper=paperGeometry(currentPaperLayout());
+const object=cleanPaperLayout({objects:[{id:newId(),type:'text',text:'Watermark',x:paper.margin,y:paper.height*.4,
+width:paper.contentWidth,height:140,size:64,align:'center',opacity:.15,rotation:-30,repeat:true,layer:'background'}]}).objects[0];
+currentPaperLayout().objects.push(object);previewSelected=object.id;
+});return;
+}
+if(command==='duplicate'&&selectedPaperObject()){
+changePreview('Duplicated page object',()=>{
+const copy=structuredClone(selectedPaperObject());copy.id=newId();copy.x+=12;copy.y+=12;
+currentPaperLayout().objects.push(copy);previewSelected=copy.id;
+});return;
+}
+if(command==='delete'&&selectedPaperObject()){
+changePreview('Removed page object',()=>{currentPaperLayout().objects=currentPaperLayout().objects.filter(object=>object.id!==previewSelected);previewSelected=null;});return;
+}
+if((command==='front'||command==='back')&&selectedPaperObject()){
+changePreview('Changed page object order',()=>{
+const layout=currentPaperLayout(),object=selectedPaperObject();
+layout.objects=layout.objects.filter(entry=>entry.id!==object.id);
+object.layer=command==='front'?'foreground':'background';
+if(command==='front')layout.objects.push(object);else layout.objects.unshift(object);
+});return;
+}
+if(command==='add-page'){changePreview('Added blank page',()=>currentPaperLayout().extraPages++);return;}
+if(command==='reset'&&window.confirm('Reset formatting and remove all added objects from this view?')){
+changePreview('Reset page formatting',()=>{paperLayouts[previewKind.value]=defaultPaperLayout();previewSelected=null;});
+}
+}
+const previewMenus=[...scorePreview.querySelectorAll('.osm-preview-menubar details')];
+scorePreview.addEventListener('click',event=>{
+const summary=event.target.closest('.osm-preview-menubar summary');
+if(summary)for(const menu of previewMenus)if(menu!==summary.parentElement)menu.open=false;
+const button=event.target.closest('[data-preview-command]');
+if(!button)return;
+for(const menu of previewMenus)menu.open=false;
+previewCommand(button.dataset.previewCommand);
+});
+scorePreview.addEventListener('pointerdown',event=>{
+if(!event.target.closest('.osm-preview-menubar'))for(const menu of previewMenus)menu.open=false;
+});
+previewPaper.addEventListener('pointerdown',event=>{
+if(event.button!==0||melody)return;
+const node=event.target.closest('[data-object-id],[data-heading]');
+if(!node){previewSelected=null;syncPreviewFields();return;}
+event.preventDefault();
+node.focus({preventScroll:true});
+const object=node.dataset.objectId?currentPaperLayout().objects.find(object=>object.id===node.dataset.objectId):null;
+previewSelected=object?.id??null;
+if(node.dataset.heading)find('preview-heading').value=node.dataset.heading;
+syncPreviewFields();
+if(object?.locked)return;
+const target=object??currentPaperLayout()[node.dataset.heading],scale=node.closest('.osm-preview-page').getBoundingClientRect().width/previewPages.paper.width;
+previewDragging={pointer:event.pointerId,node,before:previewEditState(),target,startX:event.clientX,startY:event.clientY,
+x:object?target.x:target.dx,y:object?target.y:target.dy,width:target.width,height:target.height,
+resize:event.target.dataset.resize==='true',scale,object};
+node.setPointerCapture(event.pointerId);
+});
+previewPaper.addEventListener('pointermove',event=>{
+const drag=previewDragging;
+if(!drag||event.pointerId!==drag.pointer)return;
+const dx=(event.clientX-drag.startX)/drag.scale,dy=(event.clientY-drag.startY)/drag.scale;
+if(drag.resize){
+drag.target.width=Math.max(12,drag.width+dx);drag.target.height=Math.max(12,drag.height+dy);
+drag.node.style.width=drag.target.width+'px';drag.node.style.height=drag.target.height+'px';
+}else{
+const x=drag.x+dx,y=drag.y+dy;
+if(drag.object){drag.target.x=Math.max(0,x);drag.target.y=Math.max(0,y);}
+else{drag.target.dx=x;drag.target.dy=y;}
+drag.node.style.translate=dx+'px '+dy+'px';
+}
+});
+function finishPaperDrag(event){
+const drag=previewDragging;
+if(!drag||event.pointerId!==drag.pointer)return;
+previewDragging=null;
+if(event.type==='pointercancel'){
+setPreviewEditState(drag.before);drawScorePreview(true);
+}else finishPreviewEdit(drag.before,drag.resize?'Resized page object':'Moved page object');
+}
+previewPaper.addEventListener('pointerup',finishPaperDrag);
+previewPaper.addEventListener('pointercancel',finishPaperDrag);
+previewPaper.addEventListener('lostpointercapture',finishPaperDrag);
+scorePreview.addEventListener('keydown',event=>{
+const modifier=event.metaKey||event.ctrlKey;
+if(modifier&&event.key.toLowerCase()==='s'){event.preventDefault();previewCommand('save');return;}
+if(event.key==='Escape'){
+const menu=previewMenus.find(menu=>menu.open);
+if(menu){event.preventDefault();menu.open=false;menu.querySelector('summary').focus();return;}
+}
+const menu=event.target.closest('.osm-preview-menubar details');
+if(menu&&['ArrowUp','ArrowDown'].includes(event.key)){
+event.preventDefault();
+const items=[...menu.querySelectorAll('button:not(:disabled)')];
+if(!items.length)return;
+const index=items.indexOf(document.activeElement),step=event.key==='ArrowDown'?1:-1;
+items[(index+step+items.length)%items.length].focus();return;
+}
+if(editable(event.target))return;
+if(modifier&&event.key.toLowerCase()==='z'){event.preventDefault();event.stopPropagation();previewUndo(event.shiftKey);return;}
+if(modifier&&event.key.toLowerCase()==='d'&&selectedPaperObject()){event.preventDefault();previewCommand('duplicate');return;}
+if(event.key==='Escape'&&previewSelected){event.preventDefault();previewSelected=null;syncPreviewFields();return;}
+if((event.key==='Delete'||event.key==='Backspace')&&selectedPaperObject()){event.preventDefault();previewCommand('delete');return;}
+if(selectedPaperObject()&&!selectedPaperObject().locked&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)){
+event.preventDefault();
+changePreview('Moved page object',()=>{
+const object=selectedPaperObject(),step=event.shiftKey?10:1;
+if(event.key==='ArrowLeft')object.x=Math.max(0,object.x-step);
+if(event.key==='ArrowRight')object.x+=step;
+if(event.key==='ArrowUp')object.y=Math.max(0,object.y-step);
+if(event.key==='ArrowDown')object.y+=step;
+});
+}
+});
 
 let micSession=null,practiceIndex=0,practiceCards=[];
 let pitchConfidence=0,noisePeak=0,calibrationEnd=0;
@@ -2534,14 +2963,14 @@ const tutorialSteps=[
   "editor",
   ".osm-menubar",
   "Use the editor menus",
-  "File opens imports and exports. Edit has note actions. View switches between the staff and note sequence. Window shows or hides the editing panels. Help opens this tutorial."
+  "File opens imports and exports. Edit has note actions. View opens Preview and switches between the staff and note sequence. Window shows or hides the editing panels. Help opens this tutorial."
  ],
  [
   "Score editing",
   "editor",
   "#oc93-compose-panel",
   "Compose a score",
-  "Make new score opens a blank editor. Choose a playable pitch to hear it and insert it after the current selection."
+  "Make new score opens a blank editor. Choose a pitch to hear it and insert it after the current selection. View more opens octave groups from C0 to G9. Notes outside A4–F6 appear in yellow and can be shifted with the transposition tools."
  ],
  [
   "Score editing",
@@ -2695,7 +3124,7 @@ const tutorialSteps=[
   "editor",
   "#oc93-tab-creator",
   "Export fingering tabs",
-  "Choose Edit → Open tab editor, or select Tab editor beside Staff. Edit the diagrams, spacing, title, and credit. Press Play to follow the highlighted fingerings, or use Enter and the left or right arrow keys to hear one at a time. Hold Enter to sustain a note. Tabs matching the score use its timing. A different tab sequence plays one beat per note. Use File → Preview to follow playback on the same pages as the PDF. The tab pages keep your spaces and line breaks. Pause and press Play to resume. Use Save as PDF for a paginated fingering sheet. Save the score once to find it in Recent scores. Tab drafts save automatically in this browser, and changes appear in Edit history."
+  "Choose Edit → Open tab editor, or select Tab editor beside Staff. Edit the diagrams, spacing, title, and credit. Press Play to follow the highlighted fingerings, or use Enter and the left or right arrow keys to hear one at a time. Hold Enter to sustain a note. Tabs matching the score use its timing. A different tab sequence plays one beat per note. Use View → Preview to follow playback on the same pages as the PDF. The tab pages keep your spaces and line breaks. Pause and press Play to resume. Use Save as PDF for a paginated fingering sheet. Save the score once to find it in Recent scores. Tab drafts save automatically in this browser, and changes appear in Edit history."
  ],
  [
   "Export",
@@ -2705,6 +3134,12 @@ const tutorialSteps=[
   "Choose File → Export → Download project backup. Reimport it to edit the project or open it in Practice. The separate installable preview package supports offline use after a first online visit in a compatible browser."
  ]
 ];
+tutorialSteps.splice(tutorialSteps.findIndex(step=>step[3]==='Keep a project backup'),0,
+ ['Export','editor','[data-editor-command="score-preview"]','Design the printed page', 'Open View → Preview for the page editor. File exports the current view as PDF or downloads a project backup. View switches between Staff and Fingering tabs. Edit inserts text boxes, images, watermarks, and blank pages, with layout Undo and Redo. Use Formatting for paper size, orientation, margins, heading fonts, sizes, alignment, color, and offsets. Fingering tabs also support custom diagram size and line spacing. Drag objects or resize their corner, then set opacity, rotation, page, repeat, and layer in Objects. Layouts save with the tab draft and project backup.'],
+ ['Export','editor','[data-editor-command="score-preview"]','Arrange images and text',
+  'Insert an image or text box from the page editor toolbar. Select it on the page, drag to move it, and drag the lower-right corner to resize it. Objects offers exact coordinates, dimensions, opacity, rotation, text styling, page placement, repetition, locking, and front or back layers. Delete removes an object, and Command-Z or Control-Z undoes a layout edit.'],
+ ['Export','editor','[data-editor-command="score-preview"]','Save a page design',
+  'File → Export PDF inside the page editor exports the view you are looking at. Formatting is also used by the score PDF and Tab editor PDF buttons. Save score keeps the project, and a project backup includes your images and both page layouts. Tab line breaks and spaces stay intact when a wide row is fitted to paper.']);
 let tutorialIndex=0,tutorialTarget=null;
 const tutorialTopic=find('tour-topic');
 for(const topic of new Set(tutorialSteps.map(step=>step[0])))tutorialTopic.add(new Option(topic,topic));
@@ -2735,8 +3170,10 @@ find('tour-progress').textContent=(tutorialIndex+1)+' of '+tutorialSteps.length;
 find('tour-heading').textContent=heading;
 find('tour-text').textContent=description;
 const example=find('tour-example');
-example.hidden=heading!=='Read triplets and tempo changes';
-if(!example.hidden)loadNotation().then(()=>{if(!example.hidden)window.ABCJS.renderAbc(example,'X:1\nM:4/4\nL:1/8\nQ:1/4=120\nK:C\n(3cde [Q:1/4=90] f2 z4 |]',{responsive:'resize',staffwidth:300});}).catch(loadError);
+example.style.cssText='';
+example.hidden=!['Read triplets and tempo changes','Design the printed page','Arrange images and text','Save a page design'].includes(heading);
+if(!example.hidden&&heading!=='Read triplets and tempo changes')showPaperTutorialExample(example);
+else if(!example.hidden)loadNotation().then(()=>{if(!example.hidden)window.ABCJS.renderAbc(example,'X:1\nM:4/4\nL:1/8\nQ:1/4=120\nK:C\n(3cde [Q:1/4=90] f2 z4 |]',{responsive:'resize',staffwidth:300});}).catch(loadError);
 else example.replaceChildren();
 find('tour-back').disabled=tutorialIndex===0;
 find('tour-next').textContent=tutorialIndex===tutorialSteps.length-1?'Finish':'Next';
@@ -2763,17 +3200,34 @@ if(e.code==='Escape'&&tutorial.open){e.preventDefault();tutorial.close();}
 });
 
 const composeKeys=find('compose-keys');
-for(let midi=69;midi<=89;midi++){
+function composePitchButton(midi){
 const button=document.createElement('button');
-button.className='ctrl';button.textContent=name(midi);
+button.type='button';button.className='ctrl';button.textContent=name(midi);
+if(!Music.playable(midi)){
+button.classList.add('outside-range');
+button.title='Outside A4–F6 · transpose after adding';
+}
 button.addEventListener('click',()=>{
 if(recording){report('Finish recording before adding notes.');return;}
 const index=score.events.length?position+1:0;
 score.splice(index,0,[{pitch:midi,ticks:4}]);
 edited(index,true);showPlaybackFingering(index);previewPitch(midi);
 });
-composeKeys.append(button);
+return button;
 }
+for(let midi=69;midi<=89;midi++)composeKeys.append(composePitchButton(midi));
+const extendedCompose=find('compose-extended');
+for(let octave=0;octave<=9;octave++){
+const group=document.createElement('details'),heading=document.createElement('summary'),keys=document.createElement('div');
+heading.textContent='Octave '+octave;keys.className='toolbar';
+for(let midi=(octave+1)*12;midi<=Math.min(127,(octave+2)*12-1);midi++)keys.append(composePitchButton(midi));
+group.append(heading,keys);extendedCompose.append(group);
+}
+find('compose-more').onclick=event=>{
+extendedCompose.hidden=!extendedCompose.hidden;
+event.currentTarget.setAttribute('aria-expanded',String(!extendedCompose.hidden));
+event.currentTarget.textContent=extendedCompose.hidden?'View more':'View fewer';
+};
 let practiceMode=null;
 function choosePractice(mode){
 if(practiceMode==='recognition'&&mode!=='recognition')leaveRecognition();
@@ -2789,6 +3243,18 @@ for(const button of root.querySelectorAll('[data-practice-mode]')){
 button.addEventListener('click',()=>choosePractice(button.dataset.practiceMode));
 }
 find('practice-mode-back').addEventListener('click',()=>choosePractice(null));
+
+async function showPaperTutorialExample(host){
+const step=tutorialIndex;
+const layout=defaultPaperLayout();
+layout.title.align='center';layout.title.font=paperFonts[1];layout.tabSize=52;
+layout.objects=cleanPaperLayout({objects:[{id:'demo',type:'text',text:'Practice',x:180,y:160,width:260,height:90,size:40,rotation:-20,opacity:.16,layer:'background'}]}).objects;
+const pages=await tabPaper({text:'A  D U\n\nD A',size:'52',title:'My ocarina song',credit:'Source / author',paperLayouts:{tabs:layout}});
+const page=await drawPreviewPage(pages[0],0,pages,[]);
+if(!tutorial.open||host.hidden||step!==tutorialIndex)return;
+host.replaceChildren(page);host.style.cssText='height:190px;overflow:hidden;background:#fff;position:relative';
+page.style.cssText+=';transform:scale(.42);transform-origin:top left;position:relative;color:#000';
+}
 
 const teachDialog=find('scan-teach');
 const teachCanvas=find('scan-canvas');

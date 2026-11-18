@@ -2,69 +2,95 @@ const scorePreview=find('score-preview');
 const previewKind=find('preview-kind');
 const previewPaper=find('preview-paper');
 const previewScroll=find('preview-scroll');
-let previewNotes=[],previewActive=[],previewRequest=0;
+let previewNotes=[],previewActive=[],previewRequest=0,previewPages=null,previewSaveWarning='';
 
 function fitScorePreview(){
-if(!scorePreview.open)return;
-const gutters=24;
-previewPaper.style.zoom=String(Math.max(.1,Math.min(1.25,(previewScroll.clientWidth-gutters)/scorePaper.width,
-  (previewScroll.clientHeight-gutters)/scorePaper.height)));
+if(!scorePreview.open||!previewPages)return;
+const zoom=find('preview-zoom').value,paper=previewPages.paper;
+const fitted=Math.min(1.25,(previewScroll.clientWidth-24)/paper.width,(previewScroll.clientHeight-24)/paper.height);
+previewPaper.style.zoom=String(zoom==='fit'?Math.max(.1,fitted):Number(zoom));
 }
 
-function drawPreviewPage(blocks){
+async function drawPreviewPage(blocks,index,pages,noteGroups){
+const {paper,layout}=pages;
 const page=document.createElement('div');
-page.className='osm-preview-page';
-page.style.width=scorePaper.width+'px';page.style.height=scorePaper.height+'px';
-const tabs=paintTabPage(blocks,2);
+page.className='osm-preview-page';page.dataset.page=index+1;
+page.style.width=paper.width+'px';page.style.height=paper.height+'px';
+const tabs=paintTabPage(blocks,2,paper);
 if(tabs){
-tabs.canvas.style.top=tabs.top+'px';tabs.canvas.style.left=scorePaper.margin+'px';
-tabs.canvas.style.width=scorePaperWidth+'px';tabs.canvas.style.height=tabs.height+'px';
+tabs.canvas.style.top=tabs.top+'px';tabs.canvas.style.left=paper.margin+'px';
+tabs.canvas.style.width=paper.contentWidth+'px';tabs.canvas.style.height=tabs.height+'px';
+tabs.canvas.className='osm-paper-content';
 page.append(tabs.canvas);
 }
-for(const {svg,notes,y,height,noteWidth} of blocks){
+for(const block of blocks){
+const {svg,notes,y,height,noteWidth}=block;
 if(svg){
-svg.style.top=y+'px';svg.style.left=scorePaper.margin+'px';
-page.append(svg);
-for(const [index,node] of notes??[]){
-if(index!==undefined)(previewNotes[index]??=[]).push(node);
+svg.style.top=y+(block.dy??0)+'px';svg.style.left=paper.margin+(block.dx??0)+'px';
+svg.classList.add('osm-paper-content');page.append(svg);
+if(block.heading){
+svg.dataset.heading=block.heading;svg.classList.add('osm-paper-heading');svg.style.cursor='move';
+}
+for(const [noteIndex,node] of notes??[]){
+if(noteIndex!==undefined)(noteGroups[noteIndex]??=[]).push(node);
 }
 }else{
 for(const note of notes){
 const cell=document.createElement('span');
 cell.dataset.tabIndex=note.index;
-cell.style.left=scorePaper.margin+note.x+'px';cell.style.top=y+'px';
+cell.style.left=paper.margin+note.x+'px';cell.style.top=y+'px';
 cell.style.width=noteWidth+'px';cell.style.height=height+'px';
-page.append(cell);
-previewNotes[note.index]=[cell];
+cell.className='osm-paper-content';page.append(cell);
+noteGroups[note.index]=[cell];
 }
 }
+}
+for(const object of layout.objects.filter(object=>object.repeat||object.page===index+1)){
+const handle=document.createElement('div');
+handle.className='osm-paper-object';handle.dataset.objectId=object.id;
+handle.setAttribute('aria-label',object.type==='image'?'Image':object.text||'Text box');
+handle.tabIndex=0;
+handle.style.cssText='left:'+object.x+'px;top:'+object.y+'px;width:'+object.width+'px;height:'+object.height+'px;transform:rotate('+object.rotation+'deg)';
+handle.classList.add('osm-object-'+object.layer);
+const artwork=await paintPaperObject(object,2);
+artwork.style.opacity=object.opacity;handle.append(artwork);
+if(!object.locked){
+const resize=document.createElement('span');resize.className='osm-paper-resize';resize.dataset.resize='true';handle.append(resize);
+}
+page.append(handle);
 }
 return page;
 }
 
-async function drawScorePreview(){
-const request=++previewRequest;
-const tabView=previewKind.value==='tabs';
+async function drawScorePreview(preserve=false){
+const request=++previewRequest,tabView=previewKind.value==='tabs';
 const status=find('preview-status'),playButton=find('preview-play');
-previewPaper.replaceChildren();
-previewNotes=[];previewActive=[];
-playButton.disabled=true;
-status.hidden=true;
-const draft=tabView?nativeTabDraft():null;
+const scrollTop=previewScroll.scrollTop,scrollLeft=previewScroll.scrollLeft;
+previewPaper.replaceChildren();previewNotes=[];previewActive=[];
+playButton.disabled=true;status.textContent='Preparing pages…';
+const draft=tabView?structuredClone(nativeTabDraft()):null;
 const title=tabView?draft.title.trim():projectName.value.trim()||'Untitled song';
-find('score-preview-title').textContent=title||'Untitled score';
+find('score-preview-title').textContent=(title||'Untitled score')+' — Page editor';
 try{
 if(tabView&&!nativeTabNotes().length)throw Error('Add fingerings before previewing tabs.');
 if(!tabView&&!score.events.length)throw Error('Add notes before previewing the staff.');
 const pages=tabView?await tabPaper(draft):await staffPaper(title,authorInput.value.trim(),scoreEntries(),score.tempo);
+const elements=[],noteGroups=[];
+for(const [index,blocks] of pages.entries()){
 if(request!==previewRequest||!scorePreview.open)return;
-for(const blocks of pages)previewPaper.append(drawPreviewPage(blocks));
-fitScorePreview();
-previewScroll.scrollTo(0,0);
+elements.push(await drawPreviewPage(blocks,index,pages,noteGroups));
+}
+if(request!==previewRequest||!scorePreview.open)return;
+previewPages=pages;previewNotes=noteGroups;previewPaper.append(...elements);fitScorePreview();
+if(preserve)previewScroll.scrollTo(scrollLeft,scrollTop);else previewScroll.scrollTo(0,0);
+find('preview-page-count').textContent=pages.length+' '+(pages.length===1?'page':'pages');
+status.textContent=previewSaveWarning;
 playButton.disabled=false;
+updatePreviewObjectSelection();
+syncPreviewFields();
 }catch(error){
 if(request!==previewRequest||!scorePreview.open)return;
-status.textContent=error.message;status.hidden=false;
+status.textContent=error.message;
 }
 }
 
@@ -82,16 +108,21 @@ if(target.bottom>view.bottom-8||target.top<view.top+8)previewScroll.scrollTop+=t
 function openScorePreview(){
 stopMelody();openNativeTabEditor();
 previewKind.value=editorView==='tabs'?'tabs':'staff';
-scorePreview.showModal();drawScorePreview();
+previewPast.length=0;previewFuture.length=0;previewSelected=null;previewSaveWarning='';
+find('preview-zoom').value='fit';
+scorePreview.showModal();syncPreviewFields();drawScorePreview();
 }
-previewKind.onchange=()=>{stopMelody();drawScorePreview();};
-find('preview-play').onclick=()=>play(previewKind.value==='tabs');
+previewKind.onchange=()=>{
+stopMelody();previewPast.length=0;previewFuture.length=0;previewSelected=null;
+syncPreviewFields();drawScorePreview();
+};
+find('preview-zoom').onchange=fitScorePreview;
+find('preview-play').onclick=()=>{previewSelected=null;updatePreviewObjectSelection();play(previewKind.value==='tabs');};
 find('preview-pause').onclick=pauseMelody;
 find('preview-stop').onclick=stopMelody;
 scorePreview.addEventListener('close',()=>{
-previewRequest++;
-previewPaper.replaceChildren();
-previewNotes=[];previewActive=[];
+previewRequest++;previewPages=null;
+previewPaper.replaceChildren();previewNotes=[];previewActive=[];
 stopMelody();
 });
-window.addEventListener('resize',fitScorePreview);
+new ResizeObserver(fitScorePreview).observe(previewScroll);

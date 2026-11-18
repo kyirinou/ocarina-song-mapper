@@ -89,14 +89,14 @@ const tutorialSteps=[
   "editor",
   ".osm-menubar",
   "Use the editor menus",
-  "File opens imports and exports. Edit has note actions. View switches between the staff and note sequence. Window shows or hides the editing panels. Help opens this tutorial."
+  "File opens imports and exports. Edit has note actions. View opens Preview and switches between the staff and note sequence. Window shows or hides the editing panels. Help opens this tutorial."
  ],
  [
   "Score editing",
   "editor",
   "#oc93-compose-panel",
   "Compose a score",
-  "Make new score opens a blank editor. Choose a playable pitch to hear it and insert it after the current selection."
+  "Make new score opens a blank editor. Choose a pitch to hear it and insert it after the current selection. View more opens octave groups from C0 to G9. Notes outside A4–F6 appear in yellow and can be shifted with the transposition tools."
  ],
  [
   "Score editing",
@@ -250,7 +250,7 @@ const tutorialSteps=[
   "editor",
   "#oc93-tab-creator",
   "Export fingering tabs",
-  "Choose Edit → Open tab editor, or select Tab editor beside Staff. Edit the diagrams, spacing, title, and credit. Press Play to follow the highlighted fingerings, or use Enter and the left or right arrow keys to hear one at a time. Hold Enter to sustain a note. Tabs matching the score use its timing. A different tab sequence plays one beat per note. Use File → Preview to follow playback on the same pages as the PDF. The tab pages keep your spaces and line breaks. Pause and press Play to resume. Use Save as PDF for a paginated fingering sheet. Save the score once to find it in Recent scores. Tab drafts save automatically in this browser, and changes appear in Edit history."
+  "Choose Edit → Open tab editor, or select Tab editor beside Staff. Edit the diagrams, spacing, title, and credit. Press Play to follow the highlighted fingerings, or use Enter and the left or right arrow keys to hear one at a time. Hold Enter to sustain a note. Tabs matching the score use its timing. A different tab sequence plays one beat per note. Use View → Preview to follow playback on the same pages as the PDF. The tab pages keep your spaces and line breaks. Pause and press Play to resume. Use Save as PDF for a paginated fingering sheet. Save the score once to find it in Recent scores. Tab drafts save automatically in this browser, and changes appear in Edit history."
  ],
  [
   "Export",
@@ -260,6 +260,12 @@ const tutorialSteps=[
   "Choose File → Export → Download project backup. Reimport it to edit the project or open it in Practice. The separate installable preview package supports offline use after a first online visit in a compatible browser."
  ]
 ];
+tutorialSteps.splice(tutorialSteps.findIndex(step=>step[3]==='Keep a project backup'),0,
+ ['Export','editor','[data-editor-command="score-preview"]','Design the printed page', 'Open View → Preview for the page editor. File exports the current view as PDF or downloads a project backup. View switches between Staff and Fingering tabs. Edit inserts text boxes, images, watermarks, and blank pages, with layout Undo and Redo. Use Formatting for paper size, orientation, margins, heading fonts, sizes, alignment, color, and offsets. Fingering tabs also support custom diagram size and line spacing. Drag objects or resize their corner, then set opacity, rotation, page, repeat, and layer in Objects. Layouts save with the tab draft and project backup.'],
+ ['Export','editor','[data-editor-command="score-preview"]','Arrange images and text',
+  'Insert an image or text box from the page editor toolbar. Select it on the page, drag to move it, and drag the lower-right corner to resize it. Objects offers exact coordinates, dimensions, opacity, rotation, text styling, page placement, repetition, locking, and front or back layers. Delete removes an object, and Command-Z or Control-Z undoes a layout edit.'],
+ ['Export','editor','[data-editor-command="score-preview"]','Save a page design',
+  'File → Export PDF inside the page editor exports the view you are looking at. Formatting is also used by the score PDF and Tab editor PDF buttons. Save score keeps the project, and a project backup includes your images and both page layouts. Tab line breaks and spaces stay intact when a wide row is fitted to paper.']);
 let tutorialIndex=0,tutorialTarget=null;
 const tutorialTopic=find('tour-topic');
 for(const topic of new Set(tutorialSteps.map(step=>step[0])))tutorialTopic.add(new Option(topic,topic));
@@ -290,8 +296,10 @@ find('tour-progress').textContent=(tutorialIndex+1)+' of '+tutorialSteps.length;
 find('tour-heading').textContent=heading;
 find('tour-text').textContent=description;
 const example=find('tour-example');
-example.hidden=heading!=='Read triplets and tempo changes';
-if(!example.hidden)loadNotation().then(()=>{if(!example.hidden)window.ABCJS.renderAbc(example,'X:1\nM:4/4\nL:1/8\nQ:1/4=120\nK:C\n(3cde [Q:1/4=90] f2 z4 |]',{responsive:'resize',staffwidth:300});}).catch(loadError);
+example.style.cssText='';
+example.hidden=!['Read triplets and tempo changes','Design the printed page','Arrange images and text','Save a page design'].includes(heading);
+if(!example.hidden&&heading!=='Read triplets and tempo changes')showPaperTutorialExample(example);
+else if(!example.hidden)loadNotation().then(()=>{if(!example.hidden)window.ABCJS.renderAbc(example,'X:1\nM:4/4\nL:1/8\nQ:1/4=120\nK:C\n(3cde [Q:1/4=90] f2 z4 |]',{responsive:'resize',staffwidth:300});}).catch(loadError);
 else example.replaceChildren();
 find('tour-back').disabled=tutorialIndex===0;
 find('tour-next').textContent=tutorialIndex===tutorialSteps.length-1?'Finish':'Next';
@@ -318,17 +326,34 @@ if(e.code==='Escape'&&tutorial.open){e.preventDefault();tutorial.close();}
 });
 
 const composeKeys=find('compose-keys');
-for(let midi=69;midi<=89;midi++){
+function composePitchButton(midi){
 const button=document.createElement('button');
-button.className='ctrl';button.textContent=name(midi);
+button.type='button';button.className='ctrl';button.textContent=name(midi);
+if(!Music.playable(midi)){
+button.classList.add('outside-range');
+button.title='Outside A4–F6 · transpose after adding';
+}
 button.addEventListener('click',()=>{
 if(recording){report('Finish recording before adding notes.');return;}
 const index=score.events.length?position+1:0;
 score.splice(index,0,[{pitch:midi,ticks:4}]);
 edited(index,true);showPlaybackFingering(index);previewPitch(midi);
 });
-composeKeys.append(button);
+return button;
 }
+for(let midi=69;midi<=89;midi++)composeKeys.append(composePitchButton(midi));
+const extendedCompose=find('compose-extended');
+for(let octave=0;octave<=9;octave++){
+const group=document.createElement('details'),heading=document.createElement('summary'),keys=document.createElement('div');
+heading.textContent='Octave '+octave;keys.className='toolbar';
+for(let midi=(octave+1)*12;midi<=Math.min(127,(octave+2)*12-1);midi++)keys.append(composePitchButton(midi));
+group.append(heading,keys);extendedCompose.append(group);
+}
+find('compose-more').onclick=event=>{
+extendedCompose.hidden=!extendedCompose.hidden;
+event.currentTarget.setAttribute('aria-expanded',String(!extendedCompose.hidden));
+event.currentTarget.textContent=extendedCompose.hidden?'View more':'View fewer';
+};
 let practiceMode=null;
 function choosePractice(mode){
 if(practiceMode==='recognition'&&mode!=='recognition')leaveRecognition();
@@ -344,3 +369,15 @@ for(const button of root.querySelectorAll('[data-practice-mode]')){
 button.addEventListener('click',()=>choosePractice(button.dataset.practiceMode));
 }
 find('practice-mode-back').addEventListener('click',()=>choosePractice(null));
+
+async function showPaperTutorialExample(host){
+const step=tutorialIndex;
+const layout=defaultPaperLayout();
+layout.title.align='center';layout.title.font=paperFonts[1];layout.tabSize=52;
+layout.objects=cleanPaperLayout({objects:[{id:'demo',type:'text',text:'Practice',x:180,y:160,width:260,height:90,size:40,rotation:-20,opacity:.16,layer:'background'}]}).objects;
+const pages=await tabPaper({text:'A  D U\n\nD A',size:'52',title:'My ocarina song',credit:'Source / author',paperLayouts:{tabs:layout}});
+const page=await drawPreviewPage(pages[0],0,pages,[]);
+if(!tutorial.open||host.hidden||step!==tutorialIndex)return;
+host.replaceChildren(page);host.style.cssText='height:190px;overflow:hidden;background:#fff;position:relative';
+page.style.cssText+=';transform:scale(.42);transform-origin:top left;position:relative;color:#000';
+}
