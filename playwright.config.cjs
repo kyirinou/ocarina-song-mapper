@@ -28,7 +28,19 @@ module.exports = defineConfig({
       }
     },
     ...(allBrowsers ? [
-      { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
+      {
+        name: 'firefox',
+        use: {
+          ...devices['Desktop Firefox'],
+          // Generated microphone streams do not receive a real capture permission grant.
+          launchOptions: {
+            firefoxUserPrefs: {
+              'media.autoplay.default': 0,
+              'media.autoplay.block-webaudio': false
+            }
+          }
+        }
+      },
       { name: 'webkit', use: { ...devices['Desktop Safari'] } }
     ] : [])
   ],
