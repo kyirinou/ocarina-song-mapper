@@ -28,6 +28,8 @@ npm run test:browser
 
 Tests should exercise the code used by the application. Use fixed pitches, durations, and dates when testing music or scheduling. Include a regression test for a bug that affects saved work, interchange, timing, or undo. Keep fixtures small and remove personal information from projects or recordings.
 
+Headless Linux microphone tests need a running audio server for Firefox's Web Audio clock. The GitHub workflow starts PulseAudio with a virtual output before running the tests.
+
 The offline build and browser entry point are generated files. Edit the feature source or pure modules, run `npm run build`, and include the regenerated files in the change. `npm run check` detects stale generated output and changed bundled-library hashes.
 
 ## Make a change
