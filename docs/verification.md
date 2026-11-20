@@ -1,6 +1,6 @@
 # Reliability verification
 
-These results apply to the local OSM 0.2.0 reliability update on 2026-11-19, based on published commit `72232cc` plus the implementation changes in this workspace.
+These results were recorded for the OSM 0.2.0 reliability update on 2026-11-19.
 
 ## Completed checks
 
@@ -38,7 +38,8 @@ Playwright writes reports and failure traces to ignored local directories. GitHu
 
 kiri confirmed successful manual testing in Firefox, Safari, and other browsers, and on macOS, Windows, Android, and iOS.
 
-## Automation follow-up
+## Hosted automation
 
-- The installed local Playwright Firefox build exited before loading OSM with “Could not find profile folder.” Retrying with a separate temporary directory produced the same launch error. Firefox remains configured in CI and needs a successful run in a functioning environment.
-- The new GitHub workflow has not run remotely. Pages must be switched to GitHub Actions as its deployment source, and required branch checks must be enabled, when this update is published.
+[Checks and Pages](https://github.com/kyirinou/ocarina-song-mapper/actions/workflows/checks.yml) runs the unit suite and Chromium, Firefox, and WebKit checks. GitHub Pages uses this workflow and deploys after its checks pass. Each hosted run records its result and downloadable test reports.
+
+The local Playwright Firefox runner initially exited before loading OSM with “Could not find profile folder,” including with a separate temporary directory. Hosted Firefox results are recorded in the workflow above.
