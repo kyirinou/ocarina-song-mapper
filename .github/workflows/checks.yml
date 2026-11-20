@@ -38,6 +38,11 @@ jobs:
         run: npm run test:unit
       - name: Audit test-tool dependencies
         run: npm audit --audit-level=high
+      - name: Use the main Ubuntu package archive
+        run: |
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            echo 'https://archive.ubuntu.com/ubuntu' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
+          fi
       - name: Install browser engines
         run: npx playwright install --with-deps chromium firefox webkit
       - name: Start virtual audio output for headless browser tests
