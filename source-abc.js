@@ -1,4 +1,5 @@
 function parseABC(abc){
+assertImportText(abc,'ABC notation');
 const tunes=window.ABCJS.parseOnly(abc);
 if(tunes.length!==1)throw Error('Import one ABC tune at a time.');
 const tune=tunes[0];
@@ -53,6 +54,7 @@ tie=Boolean(note?.startTie);elapsed+=duration;
 return {pitches,lengths,tempoMap};
 }
 function parseSong(input){
+assertImportText(input);
 const source=input.trim().replace(/\\(?=\r?$)/gm,'').replace(/\\=/g,'=');
 if(!source)throw Error('Paste note names or ABC notation first.');
 if(!/^X:/m.test(source)){

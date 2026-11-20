@@ -5,7 +5,7 @@ const nativeTabTitle=find('native-tab-title');
 const nativeTabCredit=find('native-tab-credit');
 const nativeTabSize=find('native-tab-size');
 const nativeTabStatus=find('native-tab-status');
-let nativeTabProject=null,initialTabDraft=null,nativeTabActivity=[],lastTabEdit=null;
+let nativeTabProject=null,initialTabDraft=null,nativeTabActivity=[],lastTabEdit=null,nativeTabRaw=null;
 let tabPlaybackCells=[],tabPlaybackCell=null,tabStepIndex=-1;
 
 function nativeTabKey(id){return 'osm-tab-draft-v1:'+id;}
@@ -29,13 +29,18 @@ if(label)lastTabEdit={label,time:now};
 initialTabDraft=nativeTabDraft();
 let saved=true;
 try{
-localStorage.setItem(nativeTabKey(nativeTabProject),JSON.stringify(initialTabDraft));
+const key=nativeTabKey(nativeTabProject),raw=JSON.stringify(initialTabDraft);
+if(localStorage.getItem(key)!==nativeTabRaw)throw Error('Another OSM tab changed this tab draft. Download a project backup, then reload.');
+localStorage.setItem(key,raw);
+if(localStorage.getItem(key)!==raw)throw Error('The tab draft could not be verified.');
+nativeTabRaw=raw;
 nativeTabStatus.textContent=projects.some(project=>project.id===nativeTabProject)
   ?'Tab draft saved in this browser.'
   :'Save the score to reopen this draft from Recent scores.';
-}catch{saved=false;nativeTabStatus.textContent='Browser storage is full or unavailable. Download a project backup to keep these changes.';}
+}catch(error){saved=false;nativeTabStatus.textContent=error.message+' Download a project backup to keep these changes.';}
 renderScoreActivity();
 updatePlaybackAvailability();
+scheduleRecoverySnapshot();
 return saved;
 }
 function updateNativeTabStyle(){
@@ -47,6 +52,7 @@ if(!initialTabDraft&&!nativeTabText.readOnly)nativeTabText.value=defaultTabLayou
 return;
 }
 nativeTabProject=projectId;
+try{nativeTabRaw=localStorage.getItem(nativeTabKey(projectId));}catch{nativeTabRaw=null;}
 tabStepIndex=-1;
 const draft=readNativeTabDraft(projectId)??initialTabDraft;
 loadPaperLayouts(draft?.paperLayouts);

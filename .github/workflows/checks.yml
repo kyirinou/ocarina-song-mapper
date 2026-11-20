@@ -1,0 +1,87 @@
+name: Checks and Pages
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '23 9 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Build, unit and browser checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - run: npm ci
+      - name: Lint modules and tests
+        run: npm run lint
+      - name: Verify committed builds and source syntax
+        run: npm run check
+      - name: Check music, project migration, and recovery
+        run: npm run test:unit
+      - name: Audit test-tool dependencies
+        run: npm audit --audit-level=high
+      - name: Install browser engines
+        run: npx playwright install --with-deps chromium firefox webkit
+      - name: Check browser behavior and accessibility
+        run: npm run test:browser
+        env:
+          OSM_ALL_BROWSERS: '1'
+      - name: Package the tested static site
+        run: npm run package:site
+      - name: Keep browser reports and traces
+        uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: browser-results
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
+      - name: Keep offline build
+        uses: actions/upload-artifact@v7
+        with:
+          name: osm-offline
+          path: osm-offline.html
+          retention-days: 30
+      - name: Upload tested Pages artifact
+        if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: site-dist
+
+  deploy:
+    name: Deploy tested build
+    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,4 +1,5 @@
 async function readTabPitches(file){
+await assertImportFile(file,'tabs');
 if(!window.pdfjsLib)await loadAsset('pdf-reader.js');
 const embedded=document.getElementById('osm-pdf-worker');
 const workerURL=embedded?URL.createObjectURL(new Blob([embedded.textContent],{type:'text/javascript'})):'./pdf-worker.js';
@@ -7,14 +8,15 @@ try{
 window.pdfjsLib.GlobalWorkerOptions.workerSrc=workerURL;
 task=window.pdfjsLib.getDocument({data:new Uint8Array(await file.arrayBuffer()),isEvalSupported:false,disableFontFace:true});
 const pdf=await task.promise;
+if(pdf.numPages>ImportLimits.pdfPages)throw Error('Upload up to 30 pages at a time.');
 const {info}=await pdf.getMetadata();
 const prefix='osm-tab-draft-v1:';
 if(info?.Keywords?.startsWith(prefix)){
 const text=decodeURIComponent(info.Keywords.slice(prefix.length));
+assertImportText(text,'Tab layout');
 return {layout:text,pitches:[...text.matchAll(/[A-Ur]/g)].map(([code])=>nativeTabPitch(code))};
 }
 const labels=new Map();
-if(pdf.numPages>30)throw Error('Upload up to 30 pages at a time.');
 for(let i=1;i<=pdf.numPages;i++){
 const page=await pdf.getPage(i);
 const content=await page.getTextContent();
@@ -30,7 +32,10 @@ if(!labels.size){
 const scanned=[];
 for(let i=1;i<=pdf.numPages;i++){
 const page=await pdf.getPage(i);
-const viewport=page.getViewport({scale:Math.min(3,1800/page.getViewport({scale:1}).width)});
+const original=page.getViewport({scale:1});
+assertImageDimensions(original.width,original.height);
+const scale=Math.min(3,1800/original.width,Math.sqrt(ImportLimits.pixels/(original.width*original.height)));
+const viewport=page.getViewport({scale});
 const canvas=document.createElement('canvas');canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);
 const context=canvas.getContext('2d',{willReadFrequently:true});
 await page.render({canvasContext:context,viewport}).promise;
@@ -161,6 +166,7 @@ return scores[0].midi;
 });
 }
 function parseTabText(text){
+assertImportText(text,'Tab layout');
 const layout=text.replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n');
 if(!/^[A-Ur|. :;()\[\]–—\-\s]+$/.test(layout)||!/[A-U]/.test(layout)){
 throw Error('Choose a tab text file saved by the OSM Tab editor.');
@@ -168,12 +174,14 @@ throw Error('Choose a tab text file saved by the OSM Tab editor.');
 return {layout,pitches:[...layout.matchAll(/[A-Ur]/g)].map(([code])=>nativeTabPitch(code))};
 }
 async function readPracticeTab(file,active){
+await assertImportFile(file,'tabs');
 if(/\.txt$/i.test(file.name))return parseTabText(await file.text());
 const signature=new Uint8Array(await file.slice(0,8).arrayBuffer());
 if((signature.join(',')==='137,80,78,71,13,10,26,10'||(signature[0]===255&&signature[1]===216&&signature[2]===255))){
+await assertImportImage(file);
 const bitmap=await createImageBitmap(file);
 try{
-if(bitmap.width*bitmap.height>12000000)throw Error('Crop the PNG to the tab area and try again.');
+assertImageDimensions(bitmap.width,bitmap.height);
 const canvas=document.createElement('canvas');
 canvas.width=bitmap.width;canvas.height=bitmap.height;
 const context=canvas.getContext('2d',{willReadFrequently:true});
@@ -263,6 +271,7 @@ find('practice-file').addEventListener('change',async e=>{
 const file=e.target.files[0];e.target.value='';
 if(!file)return;
 try{
+await assertImportFile(file,'project');
 const project=JSON.parse(await file.text());
 if(!validProject(project)||!project.notes.length)throw Error('Choose a project backup containing notes.');
 if(currentPage==='practice-setup')showPractice(project.notes,'practice-setup',project.lengths);

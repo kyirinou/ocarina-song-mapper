@@ -1,0 +1,119 @@
+{
+  "reviewedOn": "2026-11-19",
+  "components": [
+    {
+      "name": "abcjs",
+      "version": "6.7.2",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/abcjs/-/abcjs-6.7.2.tgz",
+      "files": [
+        {
+          "path": "abcjs.js",
+          "sha256": "474d064cb28e7cac751e11432b18d115e9347b34d2f44c93ec376d308ff6cd84"
+        }
+      ],
+      "tarballIntegrity": "sha512-cHCyf8j0hAcxTuwZ9l2QznaSlLK1TD2s5oVw6Ig8Kfss6VfJKoNJ1kAzMBwa6DDWeyNl2JH7mN/U+MJ8MYbC5g=="
+    },
+    {
+      "name": "jspdf",
+      "version": "4.2.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/jspdf/-/jspdf-4.2.1.tgz",
+      "files": [
+        {
+          "path": "jspdf.js",
+          "sha256": "e6551fcdc32f09d6853b2c5126d18d01d9447e0da618a41a11ebeee0f6c20d54"
+        }
+      ],
+      "tarballIntegrity": "sha512-YyAXyvnmjTbR4bHQRLzex3CuINCDlQnBqoSYyjJwTP2x9jDLuKDzy7aKUl0hgx3uhcl7xzg32agn5vlie6HIlQ=="
+    },
+    {
+      "name": "svg2pdf.js",
+      "version": "2.5.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/svg2pdf.js/-/svg2pdf.js-2.5.0.tgz",
+      "files": [
+        {
+          "path": "svg2pdf.js",
+          "sha256": "aaaac49bd1aafda834b60962230b41417e209c45f27a212c874da1fd12d15c63"
+        }
+      ],
+      "tarballIntegrity": "sha512-cFRquPkZJ6G2wVKR0Cc9Z+5Vh7ycvfBu306a/TZFNwymYgF9aURmRddDCN0siQ00+b6hqjs9tSObJudizV4IRg=="
+    },
+    {
+      "name": "pdfjs-dist",
+      "version": "3.11.174",
+      "license": "Apache-2.0",
+      "source": "https://registry.npmjs.org/pdfjs-dist/-/pdfjs-dist-3.11.174.tgz",
+      "files": [
+        {
+          "path": "pdf-reader.js",
+          "sha256": "5b5799e6f8c680663207ac5b42ee14eed2a406fa7af48f50c154f0c0b1566946"
+        },
+        {
+          "path": "pdf-worker.js",
+          "sha256": "feabdf309770ed24bba31a5467836cdc8cf639c705af27d52b585b041bb8527b"
+        }
+      ],
+      "tarballIntegrity": "sha512-TdTZPf1trZ8/UFu5Cx/GXB7GZM30LT+wWUNfsi6Bq8ePLnb+woNKtDymI2mxZYBpMbonNFqKmiz684DIfnd8dA==",
+      "advisories": [
+        {
+          "id": "GHSA-wgrm-67xf-hhpq",
+          "status": "affected version, upstream workaround active",
+          "mitigation": "getDocument isEvalSupported:false",
+          "source": "https://github.com/mozilla/pdf.js/security/advisories/GHSA-wgrm-67xf-hhpq"
+        }
+      ]
+    },
+    {
+      "name": "ts-fsrs",
+      "version": "5.4.2",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/ts-fsrs/-/ts-fsrs-5.4.2.tgz",
+      "files": [
+        {
+          "path": "fsrs.js",
+          "sha256": "a6262f3ead1ab3dbefeabcdcc4dafa970dcf96a7ebc968941460a13539951e3b"
+        }
+      ],
+      "tarballIntegrity": "sha512-z4qop4pzTcyTzuJ566d9EaX/4bZZzhYfeaPImfVr+xcYT65c5oBgFDijUhCE/D+C78eaolHIhKRZ04/RwF+v2g==",
+      "build": "esbuild 0.28.2, entry exports fsrs/createEmptyCard/Rating, bundle iife global OSMFSRS minify"
+    },
+    {
+      "name": "Open 12 Hole Ocarina 1",
+      "version": "2016 font",
+      "license": "OFL-1.1",
+      "source": "https://github.com/panzi/ocarina_tabs",
+      "files": [
+        {
+          "path": "source-fingering-data.js",
+          "sha256": "ee59340f03c8bb6acc5253c453b09c83698f44c1a78e6679f7ad5729e7de7389"
+        }
+      ]
+    },
+    {
+      "name": "oc2 samples",
+      "version": "user-provided extraction",
+      "license": "Source license not recorded",
+      "source": null,
+      "files": [
+        {
+          "path": "oc2.js",
+          "sha256": "be2c850f61b4dc67040660113774ff1aed73bdbf325460c096e536d401809a09"
+        }
+      ]
+    },
+    {
+      "name": "oc3 samples",
+      "version": "user-provided extraction",
+      "license": "Source license not recorded",
+      "source": null,
+      "files": [
+        {
+          "path": "oc3.js",
+          "sha256": "54815e07cfc6a2879f8d8f15ebcbef28d8a3f83f6a1ca0bccfe71843f20aa2cd"
+        }
+      ]
+    }
+  ]
+}

@@ -2,7 +2,9 @@
 
 **[Open OSM in your browser](https://kyirinou.github.io/ocarina-song-mapper/)**
 
-**Available on Windows, macOS, Linux, Android, and iOS**
+[![Checks and Pages](https://github.com/kyirinou/ocarina-song-mapper/actions/workflows/checks.yml/badge.svg)](https://github.com/kyirinou/ocarina-song-mapper/actions/workflows/checks.yml)
+
+**Browser app for desktop and mobile. [Browser compatibility and test coverage](docs/browser-support.md)**
 
 Ocarina Song Mapper (or OSM for short) is a versitile tool to help you learn and play your ocarina! Right now we only support an Alto C, 12 hole ocarina, but more are planned in the future! I'm really happy with the development of this so far. And if you happen to find any bugs: Please click Issues → New issue to report anything that may disrupt the user experience!
 
@@ -45,6 +47,9 @@ Press Enter to step through a score and hold it to sustain a note. Use **Play al
 - **Export music and fingering tabs.**
   Use **File → Export** for ABC, MusicXML, score PDF, or a project backup. Use **Save as PDF** inside the Tab editor for fingering sheets. The Tab editor also exports text and SVG.
 
+- **Recover recent work.**
+  Edits create local recovery snapshots. Open **File → Recovery snapshots** to restore a copy or download its backup. Versioned projects, verified saves, and conflict warnings help protect saved scores. Keep a downloaded project backup before clearing browser data or switching devices.
+
 - **Explore the instrument.**
 The **Playable notes** page has all 21 pitches from A4 to F6 with keyboard shortcuts and fingering diagrams. Use **Settings** to choose a theme, interface font, or ocarina sound. **Help** includes a guided visual tutorial.
 
@@ -72,7 +77,7 @@ To remove a saved score, right-click it in **Recent scores** and choose **Delete
 
 For the tuner, Play Along, and Convert sound, open the app over HTTPS and allow microphone access when prompted. The app processes microphone input in the browser.
 
-Saved scores live in the browser profile and site where you created them. To move a score or keep a backup, choose **File → Export → Download project backup**. Restore it through **Import → Import project backup**.
+Saved scores live in the browser profile and site where you created them. Browser data clearing can remove them, including local recovery snapshots. To move a score or keep a portable backup, choose **File → Export → Download project backup**. Restore it through **Import → Import project backup**. See [Privacy and local storage](docs/privacy.md).
 
 ## Credits and license
 
@@ -82,7 +87,7 @@ Ocarina Song Mapper is an independent project and is not affiliated with, sponso
 
 The ocarina fingering diagrams are drawn from [Open 12 Hole Ocarina 1](https://github.com/panzi/ocarina_tabs), copyright © 2016 Mathias Panzenböck, licensed under the [SIL Open Font License 1.1](https://openfontlicense.org/open-font-license-official-text/). The same font supplies the fingering outlines in the app and its PDF exports. The bundled font includes its copyright and license notice.
 
-The bundled abcjs, jsPDF, and svg2pdf.js libraries retain their own licenses and notices.
+The bundled libraries and assets retain their own terms. See [Third-party notices](docs/third-party-notices.md) and the [dependency inventory](docs/dependencies.md), including the remaining audio sample provenance review.
 
 ## Artificial Intelligence Disclaimer
 
@@ -95,3 +100,20 @@ The editor layout and styles live in `index.html` and `workspace.css`. Shared st
 The hosted app loads notation, PDF tools, and sound samples on demand. Keep the files alongside `index.html` when deploying.
 
 Note recognition uses [ts-fsrs](https://github.com/open-spaced-repetition/ts-fsrs) for local flashcard scheduling. See [FSRS-LICENSE](FSRS-LICENSE).
+
+## Reliability and contributing
+
+The **Checks and Pages** workflow builds the app and offline file, checks generated files and dependency hashes, runs the unit/browser tests, and gates its Pages deployment job on those checks. Its results become available after the workflow is published and run on GitHub.
+
+Install Node.js 22.12 or newer and Python 3, then run the following commands from the repository root.
+
+```sh
+npm ci
+npx playwright install chromium firefox webkit
+npm run build
+npm test
+```
+
+Use `OSM_ALL_BROWSERS=1 npm run test:browser` for every configured browser engine. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and test commands, [Architecture and project files](docs/architecture.md) for the score model, [CHANGELOG.md](CHANGELOG.md) for release changes, and [SECURITY.md](SECURITY.md) for private vulnerability reporting.
+
+The [release process](docs/releasing.md) explains the required repository settings, versioned releases, offline download checks, and manual browser/device verification.

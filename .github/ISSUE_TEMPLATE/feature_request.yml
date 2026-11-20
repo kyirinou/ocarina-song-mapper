@@ -1,0 +1,18 @@
+name: Feature request
+description: Suggest an improvement to composing, practice, or reliability.
+title: "[Feature] "
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What are you trying to do?
+      description: Describe the musical or editing task and what gets in the way.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Include an example or screenshot if it helps explain the idea.
+    validations:
+      required: true

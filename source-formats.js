@@ -1,5 +1,9 @@
 function readMusicXML(xml){
-  const doc=new DOMParser().parseFromString(xml,'application/xml');
+  assertImportText(xml,'MusicXML');
+  if(/<!ENTITY/i.test(xml))throw Error('Export MusicXML without internal entity declarations.');
+  const safeXML=xml.replace(/<!DOCTYPE\s+score-partwise(?:\s+(?:PUBLIC\s+["'][^"']*["']\s+["'][^"']*["']|SYSTEM\s+["'][^"']*["']))?\s*>/gi,'');
+  if(/<!DOCTYPE/i.test(safeXML))throw Error('MusicXML internal document-type subsets are unsupported.');
+  const doc=new DOMParser().parseFromString(safeXML,'application/xml');
   const parts=doc.querySelectorAll('score-partwise > part');
   if(parts.length>1)throw Error('Export the ocarina melody as a single MusicXML part before importing.');
   const part=parts[0];
@@ -11,6 +15,7 @@ function readMusicXML(xml){
     for(const item of measure.children){
       if(item.localName==='attributes'){
 divisions=Number(item.querySelector('divisions')?.textContent??divisions);
+if(!Number.isFinite(divisions)||divisions<=0)throw Error('Invalid MusicXML divisions.');
 const fifths=item.querySelector('key > fifths');
 if(fifths){
 const signature=Object.keys(keySignatures).find(name=>keySignatures[name]===Number(fifths.textContent));
@@ -96,27 +101,31 @@ find('musicxml-export').onclick=()=>{if(score.events.length)download('ocarina.mu
 find('musicxml-file').onchange=async event=>{
   const file=event.target.files[0];event.target.value='';
   if(!file)return;
+  const request=++pdfRequest;
   try{
+    await assertImportFile(file,'musicxml');
     const imported=readMusicXML(await file.text());
     const score={...imported,id:newId(),title:imported.title||file.name.replace(/\.[^.]+$/,''),author:imported.author||''};
-    if(currentPage!=='import')return;
+    if(currentPage!=='import'||request!==pdfRequest)return;
     if(!score.notes.length||!validProject(score))throw Error('No supported melody found.');
     if(!canReplace())return;
     loadProject(score);draftChanged=true;openPage('editor');
-  }catch(error){if(currentPage==='import')report(error.message);}
+  }catch(error){if(currentPage==='import'&&request===pdfRequest)report(error.message);}
 };
 find('audio-file').onchange=async event=>{
   const file=event.target.files[0];event.target.value='';
   if(!file)return;
   const Audio=window.AudioContext||window.webkitAudioContext;
+  const request=++pdfRequest;
   let ctx;
   try{
+    await assertImportFile(file,'audio');
     if(micSession)stopMic();
     ctx=new Audio();
     report('Analyzing solo recording…');
     const buffer=await ctx.decodeAudioData(await file.arrayBuffer());
     if(buffer.duration>180)throw Error('Use a solo recording under three minutes.');
-    if(currentPage!=='import')return;
+    if(currentPage!=='import'||request!==pdfRequest)return;
     capturedSound=[];soundNote=null;soundCandidate=null;soundEnd=0;
     const samples=buffer.getChannelData(0),windowSize=2048;
     const step=Math.round(buffer.sampleRate*.02);
@@ -125,10 +134,10 @@ find('audio-file').onchange=async event=>{
       const hz=estimatePitch(frame,buffer.sampleRate);
       const exact=hz?69+12*Math.log2(hz/440):null,midi=exact===null?null:Math.round(exact);
       captureSoundFrame(midi,hz,midi===null?0:Math.round((exact-midi)*100),offset/buffer.sampleRate*1000);
-      if(offset%(step*40)===0){await new Promise(resolve=>setTimeout(resolve,0));if(currentPage!=='import')return;}
+      if(offset%(step*40)===0){await new Promise(resolve=>setTimeout(resolve,0));if(currentPage!=='import'||request!==pdfRequest)return;}
     }
     find('convert-open').open=true;stopSoundCapture();report('');
-  }catch(error){if(currentPage==='import')report(error.message);}
+  }catch(error){if(currentPage==='import'&&request===pdfRequest)report(error.message);}
   finally{await ctx?.close().catch(()=>{});}
 };
 
@@ -136,10 +145,14 @@ function readMIDI(bytes){
   const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
   const tag=i=>String.fromCharCode(...bytes.subarray(i,i+4));
   if(bytes.length<14||tag(0)!=='MThd')throw Error('Invalid MIDI header.');
+  const headerLength=view.getUint32(4);
+  if(headerLength<6||8+headerLength>bytes.length)throw Error('Incomplete MIDI header.');
   const division=view.getUint16(12), tracks=view.getUint16(10);
+  if(!tracks||tracks>256)throw Error('Import a MIDI file with 1 to 256 tracks.');
   if(!division||division&32768)throw Error('MIDI must use beats as its time base.');
   const format=view.getUint16(8);
   if(format>1)throw Error('MIDI format 2 sequences are unsupported.');
+  if(format===0&&tracks!==1)throw Error('MIDI format 0 must contain one track.');
   const tempoEvents=new Map([[0,500000]]);
   let offset=8+view.getUint32(4);
   const melodies=[];
@@ -153,9 +166,11 @@ function readMIDI(bytes){
     const active=new Map(),events=[];
     while(offset<end){
       tick+=vlq();
+      if(!Number.isSafeInteger(tick))throw Error('MIDI timing exceeds the supported range.');
       let command=byte();
       if(command<128){offset--;command=status;}
       if(command===255){
+        status=0;
         const kind=byte(),length=vlq();
         if(offset+length>end)throw Error('Incomplete MIDI metadata.');
         if(kind===81&&length===3){
@@ -164,10 +179,15 @@ function readMIDI(bytes){
         }
         offset+=length;continue;
       }
-      if(command===240||command===247){const length=vlq();offset+=length;continue;}
+      if(command===240||command===247){
+        status=0;const length=vlq();
+        if(offset+length>end)throw Error('Incomplete MIDI system event.');
+        offset+=length;continue;
+      }
       if(command<128||command>=240)throw Error('Unsupported MIDI event.');
       status=command;
       const kind=command>>4,key=byte(),velocity=kind===12||kind===13?0:byte();
+      if(key>127||velocity>127)throw Error('Invalid MIDI data byte.');
       if((command&15)===9)continue;
       const id=(command&15)*128+key;
       if(kind===9&&velocity){active.set(id,tick);continue;}
@@ -211,6 +231,7 @@ if(!file)return;
 pendingMIDI=null;find('midi-picker').hidden=true;
 const request=++pdfRequest;
 try{
+await assertImportFile(file,'midi');
 const scores=readMIDI(new Uint8Array(await file.arrayBuffer()));
 if(currentPage!=='import'||request!==pdfRequest)return;
 pendingMIDI={scores,title:file.name.replace(/\.[^.]+$/,'')};

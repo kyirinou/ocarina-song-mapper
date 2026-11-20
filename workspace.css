@@ -573,3 +573,8 @@ html[data-theme=light] #oc93 #oc93-compose-extended .outside-range { color:#7852
 #oc93 .osm-preview-toolbar .ctrl,#oc93 .osm-preview-titlebar .ctrl { min-height:26px; padding:3px 9px; font-size:12px; font-weight:400; }
 #oc93 .osm-paper-heading { touch-action:none; }
 #oc93-tour #oc93-tour-example .osm-preview-page > :is(svg,canvas,[data-tab-index],.osm-paper-object) { position:absolute; }
+#oc93 .osm-storage-note { color:var(--viz-muted); font-size:12px; line-height:1.5; }
+#oc93 #oc93-recovery { width:min(760px,calc(100vw - 40px)); }
+#oc93 .osm-recovery-row { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:10px 0; border-bottom:1px solid var(--viz-border); }
+#oc93 .osm-recovery-row > span { flex:1; min-width:180px; font-size:12px; }
+#oc93 :is(button,summary,input,select,textarea,[tabindex]):focus-visible { outline:2px solid var(--viz-text); outline-offset:3px; }

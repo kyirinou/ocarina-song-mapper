@@ -23,7 +23,7 @@ function restoreEdit(from,to){
   score.load(state);find("meter").value=score.meter;find("score-key").value=score.key;find("editor-tempo").value=score.tempo;
   lastScore=captureEdit();draftChanged=true;
   addScoreActivity(from===historyPast?'Undid edit':'Redid edit');
-  refreshSong(state.position);updateHistoryButtons();drawTimeline();
+  refreshSong(state.position);scheduleRecoverySnapshot();updateHistoryButtons();drawTimeline();
   if(!find('score').hidden)showScore(false);
 }
 find('undo').onclick=()=>restoreEdit(historyPast,historyFuture);

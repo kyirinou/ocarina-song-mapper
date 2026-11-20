@@ -266,6 +266,8 @@ tutorialSteps.splice(tutorialSteps.findIndex(step=>step[3]==='Keep a project bac
   'Insert an image or text box from the page editor toolbar. Select it on the page, drag to move it, and drag the lower-right corner to resize it. Objects offers exact coordinates, dimensions, opacity, rotation, text styling, page placement, repetition, locking, and front or back layers. Delete removes an object, and Command-Z or Control-Z undoes a layout edit.'],
  ['Export','editor','[data-editor-command="score-preview"]','Save a page design',
   'File → Export PDF inside the page editor exports the view you are looking at. Formatting is also used by the score PDF and Tab editor PDF buttons. Save score keeps the project, and a project backup includes your images and both page layouts. Tab line breaks and spaces stay intact when a wide row is fitted to paper.']);
+tutorialSteps.push(['Export','home','#oc93-recovery-open','Recover recent edits',
+'OSM keeps recent recovery snapshots as you edit. Recover work opens snapshots from this browser, including unsaved notes and page layouts. Restore copy opens a separate score. Download backup keeps your work outside browser storage. Clearing site data removes both saved scores and snapshots.']);
 let tutorialIndex=0,tutorialTarget=null;
 const tutorialTopic=find('tour-topic');
 for(const topic of new Set(tutorialSteps.map(step=>step[0])))tutorialTopic.add(new Option(topic,topic));

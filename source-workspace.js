@@ -97,6 +97,7 @@ menuBar.addEventListener('click',event=>{
   summaryButton.focus({preventScroll:true});
   if(command.startsWith('@'))openPage(command.slice(1));
   else if(command==='score-preview')openScorePreview();
+  else if(command==='recovery')openRecovery();
   else if(command==='rename-score')openRenameScore();
   else if(command==='delete-score'){
     const saved=projects.find(project=>project.id===projectId);

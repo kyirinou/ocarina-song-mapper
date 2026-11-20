@@ -1,0 +1,46 @@
+name: Bug report
+description: Report a reproducible problem with OSM.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: Please remove personal information from any attached score, image, or recording. For a suspected security vulnerability, follow SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: OSM version
+      description: Include the displayed version or Git commit and whether you used the website or offline HTML.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Browser and operating system
+      placeholder: Safari 18, macOS 15, or Chrome 142, Android 15
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include the menu path, buttons, and a small example of notes or a shareable file.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: Include the exact error message and screenshots when useful.
+    validations:
+      required: true
+  - type: textarea
+    id: recovery
+    attributes:
+      label: Saving or recovery details
+      description: If work was affected, say whether saving, reloading, recovery, or backup import changed the result. Keep a copy of the original backup before testing.

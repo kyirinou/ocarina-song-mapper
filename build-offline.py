@@ -1,4 +1,5 @@
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 import re
 
 root = Path(__file__).resolve().parent
@@ -22,4 +23,6 @@ html = re.sub(r'<script defer src="source-fingering-data\.js[^"]*"></script>\n',
 html, count = re.subn(r'<script defer src="app\.js(?:\?[^"]*)?"></script>', lambda _: worker + '\n' + scripts, html)
 if count != 1:
     raise ValueError('Expected one app script')
-(root / 'osm-offline.html').write_text(html)
+with NamedTemporaryFile(mode='w',encoding='utf-8',dir=root,delete=False) as output:
+    output.write(html)
+Path(output.name).replace(root / 'osm-offline.html')

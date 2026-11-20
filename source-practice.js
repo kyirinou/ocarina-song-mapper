@@ -6,29 +6,9 @@ for(const sample of samples)energy+=sample*sample;
 return Math.sqrt(energy/samples.length);
 }
 function estimatePitch(samples,rate){
-pitchConfidence=0;
-let energy=0;
-for(const sample of samples)energy+=sample*sample;
-if(Math.sqrt(energy/samples.length)<.006)return 0;
-const maxLag=Math.floor(rate/180),minLag=Math.floor(rate/1800);
-const length=Math.min(768,samples.length-maxLag-1);
-if(length<=0)return 0;
-const values=new Float32Array(maxLag+1);
-let total=0;
-for(let lag=1;lag<=maxLag;lag++){
-let sum=0;
-for(let i=0;i<length;i+=2){const diff=samples[i]-samples[i+lag];sum+=diff*diff;}
-total+=sum;values[lag]=total?sum*lag/total:1;
-}
-for(let lag=minLag;lag<maxLag;lag++){
-if(values[lag]>.17)continue;
-while(lag<maxLag-1&&values[lag+1]<values[lag])lag++;
-const a=values[lag-1],b=values[lag],c=values[lag+1];
-const offset=a+c===2*b?0:(a-c)/(2*(a+c-2*b));
-pitchConfidence=1-b;
-return rate/(lag+Math.max(-.5,Math.min(.5,offset)));
-}
-return 0;
+const result=detectPitch(samples,rate);
+pitchConfidence=result.confidence;
+return result.frequency;
 }
 function stopMic(message){
 const session=micSession;

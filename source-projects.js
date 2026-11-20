@@ -1,6 +1,11 @@
 const projectStatus=find('project-status'), projectMenu=find('projects'), projectName=find('project-name'), authorInput=find('author');
 const pitchEditor=find('edit-pitch'), beatsEditor=find('edit-beats');
 const storageKey='ocarina-song-mapper-v1';
+const projectStorage=new ProjectStore({
+getItem:key=>localStorage.getItem(key),
+setItem:(key,value)=>localStorage.setItem(key,value),
+removeItem:key=>localStorage.removeItem(key)
+});
 let projects=[], projectId=null, draftChanged=false, scoreActivity=[];
 const maxScoreActivity=30;
 function renderScoreActivity(){
@@ -32,28 +37,14 @@ const link=document.createElement('a');link.href=url;link.download=filename;link
 setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
-function meterTicks(value){
-const match=typeof value==='string'&&value.match(/^([1-9]|1[0-9]|2[0-4])\/(2|4|8|16)$/);
-return match?16*Number(match[1])/Number(match[2]):0;
-}
-const ScoreModel={
-validate(p){
-return Boolean(p&&typeof p.id==='string'&&typeof p.title==='string'&&
-(p.author===undefined||typeof p.author==='string')&&Array.isArray(p.notes)&&p.notes.every(Music.validPitch)&&
-Array.isArray(p.lengths)&&p.lengths.length===p.notes.length&&p.lengths.every(n=>Number.isFinite(n)&&n>0)&&
-Number.isFinite(p.tempo)&&p.tempo>=20&&p.tempo<=400&&Array.isArray(p.intervals)&&
-(p.tempoMap===undefined||(Array.isArray(p.tempoMap)&&p.tempoMap.every((mark,i)=>mark&&Number.isFinite(mark.tick)&&mark.tick>=0&&Number.isFinite(mark.bpm)&&mark.bpm>0&&(!i||mark.tick>p.tempoMap[i-1].tick))))&&
-(p.performance===undefined||(Array.isArray(p.performance)&&p.performance.length===p.notes.length&&p.performance.every(e=>e&&(e.velocity===undefined||(Number.isInteger(e.velocity)&&e.velocity>=1&&e.velocity<=127))&&(e.muted===undefined||typeof e.muted==='boolean'))))&&
-p.intervals.length<=p.notes.length&&p.intervals.every(n=>n===null||(Number.isFinite(n)&&n>0)));
-}
-};
+const ScoreModel={validate:validateProject};
 const keySignatures={Cb:-7,Gb:-6,Db:-5,Ab:-4,Eb:-3,Bb:-2,F:-1,C:0,G:1,D:2,A:3,E:4,B:5,'F#':6,'C#':7};
 function signatureAccidental(letter){
 const count=keySignatures[score.key];
 return (count<0?'BEADGCF':'FCGDAEB').slice(0,Math.abs(count)).includes(letter)?(count<0?'_':'^'):'=';
 }
 function snapshot(){
-return {id:projectId,title:projectName.value.trim()||'Untitled song',author:authorInput.value.trim(),notes:[...score.pitches],
+return {schemaVersion:1,appVersion:'0.2.0',id:projectId,title:projectName.value.trim()||'Untitled song',author:authorInput.value.trim(),notes:[...score.pitches],
 lengths:[...score.lengths],tempo:score.tempo,tempoMap:score.tempoMap.map(mark=>({...mark})),meter:score.meter,key:score.key,intervals:Array.from(score.intervals,n=>n??null),
 performance:score.events.map(({velocity,muted})=>({velocity,muted})),
 activity:scoreActivity.slice(),
@@ -61,27 +52,16 @@ tabDraft:nativeTabProject===projectId?nativeTabDraft():readNativeTabDraft(projec
 }
 function validProject(project){return ScoreModel.validate(project);}
 function restoreSavedProjects(){
-let raw;
-try{raw=localStorage.getItem(storageKey);}catch{return;}
-if(!raw)return;
 try{
-const saved=JSON.parse(raw);
-if(!Array.isArray(saved?.projects))throw Error('Invalid library');
-const recovered=saved.projects.filter(validProject);
-if(recovered.length!==saved.projects.length){
-localStorage.setItem(storageKey+'-recovery',raw);
-report('Some saved scores could not be opened. A recovery copy was kept.');
-}
-projects=recovered.filter(project=>project.id!=='starter');
-projectId=saved.active;
-}catch{
-try{if(!localStorage.getItem(storageKey+'-recovery'))localStorage.setItem(storageKey+'-recovery',raw);}catch{}
-report('The saved library could not be read. You can restore scores from a project backup.');
-}
+const saved=projectStorage.read();
+projects=saved.projects;projectId=saved.active;
+if(saved.recovered)report('Recovered saved data. Open File → Recovery snapshots to review your work.');
+else if(saved.issues.length)report(saved.issues[0]);
+}catch(error){report('Saved scores could not be loaded. '+error.message);}
 }
 function persist(library=projects,active=projectId){
-try{localStorage.setItem(storageKey,JSON.stringify({projects:library,active}));return true;}
-catch{report('Local storage is unavailable. Export the project to save a backup.');return false;}
+try{return projectStorage.save(library,active);}
+catch(error){report('Save failed. '+error.message+' Download a project backup to keep your changes.');return false;}
 }
 const recentScoreMenu=find('recent-score-menu');
 let recentScoreTarget;
@@ -119,6 +99,7 @@ if(!window.confirm(message))return false;
 const remaining=projects.filter(saved=>saved.id!==project.id);
 if(!persist(remaining,active?null:projectId))return false;
 projects=remaining;
+try{projectStorage.removeCheckpoints(project.id);}catch{}
 try{localStorage.removeItem(nativeTabKey(project.id));}catch{}
 if(active)loadProject(emptyProject());
 else refreshMenu();
@@ -178,7 +159,7 @@ recent.append(...ordered.slice(0,6).map(project=>scoreRow(project,true)));
 let currentPage='home';
 function openPage(page){
 if(currentPage==='practice'&&page!==currentPage){stopStep();find('practice-metronome').checked=false;stopPracticeClick();}
-if(currentPage!==page){closeRecentScoreMenu();if(currentPage==='editor')rollWindow.close();if(currentPage==='practice-setup')leaveRecognition();pdfRequest++;report('');stopMic('Microphone stopped.');closeNoteMenu();}
+if(currentPage!==page){flushRecoverySnapshot();closeRecentScoreMenu();if(currentPage==='editor')rollWindow.close();if(currentPage==='practice-setup')leaveRecognition();pdfRequest++;report('');stopMic('Microphone stopped.');closeNoteMenu();}
 if(currentPage!==page&&(currentPage==='editor'||currentPage==='palette'))stopSound();
 for(const id of ['home','library','import','palette','editor','help','tuner','practice','practice-setup'])find('page-'+id).hidden=id!==page;
 find('home-nav').hidden=['home','practice-setup','palette','tuner','help'].includes(page);
@@ -204,6 +185,8 @@ bar.style.width='0%';
 if(currentPage==='editor')updateWorkspace();
 }
 function loadProject(p){
+flushRecoverySnapshot();
+p=migrateProject(p);
 finishRecording();stopSound();
 if(micSession?.mode==='convert')stopMic();
 capturedSound=[];soundNote=null;find('convert-use').disabled=true;
@@ -225,13 +208,13 @@ historyPast.length=0;historyFuture.length=0;lastScore=captureEdit();updateHistor
 }
 function canReplace(){return !draftChanged||window.confirm('Discard unsaved song changes?');}
 find('save').addEventListener('click',()=>{
-const project=snapshot();
+const project=migrateProject(snapshot());
 project.activity=[...project.activity,{label:'Saved score',at:new Date().toISOString()}].slice(-maxScoreActivity);
 const next=projects.filter(saved=>saved.id!==projectId).concat(project);
 if(!persist(next))return;
 projects=next;scoreActivity=project.activity;renderScoreActivity();
 projectName.value=project.title;refreshMenu();updateWorkspace();
-draftChanged=false;report('Saved '+project.title+'.');
+draftChanged=false;flushRecoverySnapshot('Saved score');report('Saved '+project.title+'.');
 });
 const renameDialog=find('rename-score');
 let previousTitle,previousAuthor;
@@ -249,7 +232,7 @@ projectName.value=projectName.value.trim()||'Untitled song';
 authorInput.value=authorInput.value.trim();
 if(projectName.value===previousTitle&&authorInput.value===previousAuthor)return;
 draftChanged=true;
-addScoreActivity('Updated title or author');
+addScoreActivity('Updated title or author');scheduleRecoverySnapshot();
 updateWorkspace();
 if(!find('score').hidden&&!recording)updateNotation();
 });
@@ -267,7 +250,8 @@ find('restore').addEventListener('change',async e=>{
 const file=e.target.files[0];e.target.value='';
 if(!file)return;
 try{
-const project=JSON.parse(await file.text());
+await assertImportFile(file,'project');
+const project=migrateProject(JSON.parse(await file.text()));
 if(!validProject(project))throw Error('This file is not an Ocarina Song Mapper project.');
 if(canReplace()){const restored={...project,id:newId()};loadProject(restored);if(typeof restored.tabDraft?.text==='string'){try{localStorage.setItem(nativeTabKey(restored.id),JSON.stringify(restored.tabDraft));}catch{}}draftChanged=true;openPage('editor');report('Project imported. Click Save project to keep it in the menu.');}
 }catch(error){report(error.message);}
@@ -317,7 +301,7 @@ selectFingering(69);
 function edited(index,structure=false){
 stopSound();
 if(structure){finishRecording();take=[];find('score').hidden=true;}
-draftChanged=true;refreshSong(index);rememberEdit();
+draftChanged=true;refreshSong(index);rememberEdit();scheduleRecoverySnapshot();
 if(!find('score').hidden)showScore(false);
 }
 pitchEditor.addEventListener('change',()=>{

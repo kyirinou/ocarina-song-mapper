@@ -92,6 +92,8 @@ holeMenu.addEventListener('keydown',event=>{
     (document.activeElement===fillHoles?clearHoles:fillHoles).focus();
   }
 });
+// Keep menu focus while a pointer activates a button, including macOS Safari.
+holeMenu.addEventListener('pointerdown',event=>{if(event.button===0)event.preventDefault();});
 holeMenu.addEventListener('focusout',event=>{
   if(!holeMenu.contains(event.relatedTarget))closeHoleMenu();
 });

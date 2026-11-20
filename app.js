@@ -20,9 +20,235 @@ const Music = {
   playable(p){return p===null||(Number.isInteger(p)&&p>=69&&p<=89);}
 };
 
+
+const pitchClasses={C:0,D:2,E:4,F:5,G:7,A:9,B:11};
+const pitchNames=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
+function toMidi(text){
+  const match=typeof text==='string'&&text.trim().match(/^([A-G])([#♯b♭]?)([0-9])$/i);
+  if(!match)throw Error('Use a pitch such as A4 or D#5.');
+  const pitch=(Number(match[3])+1)*12+pitchClasses[match[1].toUpperCase()]+
+    (['#','♯'].includes(match[2])?1:['b','♭'].includes(match[2])?-1:0);
+  if(!Music.validPitch(pitch))throw Error('Pitch is outside C0–G9.');
+  return pitch;
+}
+function pitchName(pitch){
+  if(pitch===null)return 'Rest';
+  if(!Music.validPitch(pitch))throw Error('Invalid pitch.');
+  return pitchNames[pitch%12]+(Math.floor(pitch/12)-1);
+}
+function meterTicks(value){
+  const match=typeof value==='string'&&value.match(/^([1-9]|1[0-9]|2[0-4])\/(2|4|8|16)$/);
+  return match?16*Number(match[1])/Number(match[2]):0;
+}
+function validateProject(p){
+return Boolean(p&&typeof p.id==='string'&&p.id.length>0&&typeof p.title==='string'&&
+(p.author===undefined||typeof p.author==='string')&&Array.isArray(p.notes)&&p.notes.every(Music.validPitch)&&
+Array.isArray(p.lengths)&&p.lengths.length===p.notes.length&&p.lengths.every(n=>Number.isFinite(n)&&n>0)&&
+Number.isFinite(p.tempo)&&p.tempo>=20&&p.tempo<=400&&Array.isArray(p.intervals)&&
+(p.tempoMap===undefined||(Array.isArray(p.tempoMap)&&p.tempoMap.every((mark,i)=>mark&&Number.isFinite(mark.tick)&&mark.tick>=0&&Number.isFinite(mark.bpm)&&mark.bpm>0&&(!i||mark.tick>p.tempoMap[i-1].tick))))&&
+(p.performance===undefined||(Array.isArray(p.performance)&&p.performance.length===p.notes.length&&p.performance.every(e=>e&&(e.velocity===undefined||(Number.isInteger(e.velocity)&&e.velocity>=1&&e.velocity<=127))&&(e.muted===undefined||typeof e.muted==='boolean'))))&&
+(p.schemaVersion===undefined||p.schemaVersion===1)&&
+(p.meter===undefined||meterTicks(p.meter)>0)&&
+(p.key===undefined||['Cb','Gb','Db','Ab','Eb','Bb','F','C','G','D','A','E','B','F#','C#'].includes(p.key))&&
+(p.tabDraft===undefined||p.tabDraft===null||(typeof p.tabDraft==='object'&&typeof p.tabDraft.text==='string'&&
+['title','credit'].every(field=>p.tabDraft[field]===undefined||typeof p.tabDraft[field]==='string')&&
+(p.tabDraft.size===undefined||(Number.isFinite(Number(p.tabDraft.size))&&Number(p.tabDraft.size)>=12&&Number(p.tabDraft.size)<=160))))&&
+p.intervals.length<=p.notes.length&&p.intervals.every(n=>n===null||(Number.isFinite(n)&&n>0)));
+}
+function migrateProject(project){
+  if(!validateProject(project))throw Error('This project has invalid notes, durations, or timing.');
+  if(project.schemaVersion!==undefined&&project.schemaVersion!==1)throw Error('This project requires a newer OSM version.');
+  if(project.meter!==undefined&&!meterTicks(project.meter))throw Error('Invalid time signature.');
+  const result=structuredClone(project);
+  result.schemaVersion=1;
+  result.author??='';
+  result.key??='C';
+  result.meter??='4/4';
+  result.tempoMap??=[];
+  result.intervals=project.notes.map((_,index)=>project.intervals[index]??null);
+  return result;
+}
+
+function detectPitch(samples,rate){
+let energy=0;
+for(const sample of samples)energy+=sample*sample;
+if(Math.sqrt(energy/samples.length)<.006)return {frequency:0,confidence:0};
+const maxLag=Math.floor(rate/180),minLag=Math.floor(rate/1800);
+const length=Math.min(768,samples.length-maxLag-1);
+if(length<=0)return {frequency:0,confidence:0};
+const values=new Float32Array(maxLag+1);
+let total=0;
+for(let lag=1;lag<=maxLag;lag++){
+let sum=0;
+for(let i=0;i<length;i+=2){const diff=samples[i]-samples[i+lag];sum+=diff*diff;}
+total+=sum;values[lag]=total?sum*lag/total:1;
+}
+for(let lag=minLag;lag<maxLag;lag++){
+if(values[lag]>.17)continue;
+while(lag<maxLag-1&&values[lag+1]<values[lag])lag++;
+const a=values[lag-1],b=values[lag],c=values[lag+1];
+const offset=a+c===2*b?0:(a-c)/(2*(a+c-2*b));
+const confidence=1-b;
+return {frequency:rate/(lag+Math.max(-.5,Math.min(.5,offset))),confidence};
+}
+return {frequency:0,confidence:0};
+}
+
+// This checksum detects accidental truncation and corruption. It is not authentication.
+function checksum(text){
+  let hash=2166136261;
+  for(let i=0;i<text.length;i++)hash=Math.imul(hash^text.charCodeAt(i),16777619);
+  return (hash>>>0).toString(16).padStart(8,'0');
+}
+function encode(payload,revision){
+  return JSON.stringify({schemaVersion:1,revision,payload,checksum:checksum(JSON.stringify(payload))});
+}
+function decode(raw){
+  const value=JSON.parse(raw);
+  if(!value||typeof value!=='object')throw Error('Saved data is not a library.');
+  if(value.schemaVersion===undefined)return {payload:value,revision:0};
+  if(value.schemaVersion!==1){
+    const error=new Error('Saved data requires a newer OSM version.');
+    error.code='UNSUPPORTED_SCHEMA';
+    throw error;
+  }
+  if(!Number.isSafeInteger(value.revision)||value.revision<1||checksum(JSON.stringify(value.payload))!==value.checksum){
+    throw Error('Saved data failed its integrity check.');
+  }
+  return value;
+}
+class ProjectStore {
+  constructor(storage,{key='ocarina-song-mapper-v1'}={}){
+    this.storage=storage;
+    this.key=key;
+    this.revision=0;
+    this.blocked=false;
+  }
+  read(){
+    const candidates=[],issues=[];
+    for(const suffix of ['', '-pending','-previous']){
+      try{
+        const raw=this.storage.getItem(this.key+suffix);
+        if(!raw)continue;
+        const value=decode(raw);
+        if(!Array.isArray(value.payload?.projects))throw Error('The saved library has no project list.');
+        const projects=[];
+        for(const project of value.payload.projects){
+          try{
+            if(project?.id==='starter')continue;
+            projects.push(migrateProject(project));
+          }
+          catch(error){
+            issues.push(error.message);
+            try{this.preserve(raw);}
+            catch{
+              this.blocked=true;
+              issues.push('The original library is retained, but storage could not hold a recovery copy.');
+            }
+          }
+        }
+        candidates.push({...value,projects,suffix,raw});
+      }catch(error){
+        issues.push(error.message);
+        try{
+          const raw=this.storage.getItem(this.key+suffix);
+          if(raw)this.preserve(raw);
+          let value;
+          try{value=JSON.parse(raw);}catch{}
+          if(value?.schemaVersion!==undefined&&value.schemaVersion!==1)this.blocked=true;
+        }catch{this.blocked=true;}
+      }
+    }
+    // A newer pending write is a recoverable interrupted save.
+    candidates.sort((a,b)=>b.revision-a.revision||a.suffix.length-b.suffix.length);
+    const chosen=candidates[0];
+    this.revision=chosen?.revision??0;
+    this.lastVerifiedRaw=chosen?.raw??null;
+    return {projects:chosen?.projects??[],active:chosen?.payload.active??null,
+      recovered:Boolean(chosen?.suffix)||issues.length>0,issues};
+  }
+  preserve(raw){
+    if(!this.storage.getItem(this.key+'-recovery'))this.storage.setItem(this.key+'-recovery',raw);
+  }
+  save(projects,active){
+    if(this.blocked)throw Error('Saved data could not be safely recovered. Download a backup before replacing browser data.');
+    const normalized=projects.map(migrateProject);
+    if(new Set(normalized.map(project=>project.id)).size!==normalized.length)throw Error('Duplicate project identifiers.');
+    const pending=this.storage.getItem(this.key+'-pending');
+    if(pending&&pending!==this.pendingRaw){
+      let journal;
+      try{journal=decode(pending);}catch{this.preserve(pending);}
+      if(journal?.revision>this.revision)throw Error('Another OSM tab has a recoverable save. Reload this tab before saving.');
+    }
+    let current=this.storage.getItem(this.key);
+    let currentRevision=0;
+    if(current){
+      let value;
+      try{value=decode(current);}
+      catch(error){
+        this.preserve(current);
+        if(error.code==='UNSUPPORTED_SCHEMA')throw error;
+        current=this.lastVerifiedRaw;
+        if(current)value=decode(current);
+      }
+      currentRevision=value?.revision??0;
+      if(currentRevision>this.revision)throw Error('Another OSM tab saved changes. Reload this tab before saving.');
+    }
+    const revision=Math.max(this.revision,currentRevision)+1;
+    const raw=encode({projects:normalized,active},revision);
+    this.pendingRaw=raw;
+    this.storage.setItem(this.key+'-pending',raw);
+    if(this.storage.getItem(this.key+'-pending')!==raw)throw Error('The recovery write could not be verified.');
+    if(current){
+      // Retain the last verified library before replacing it.
+      decode(current);
+      this.storage.setItem(this.key+'-previous',current);
+    }
+    this.storage.setItem(this.key,raw);
+    if(this.storage.getItem(this.key)!==raw)throw Error('The saved library could not be verified.');
+    this.revision=revision;
+    this.lastVerifiedRaw=raw;
+    try{this.storage.removeItem(this.key+'-pending');}catch{}
+    this.pendingRaw=null;
+    return true;
+  }
+  checkpoints(){
+    const raw=this.storage.getItem(this.key+'-checkpoints');
+    if(!raw)return [];
+    const {payload}=decode(raw);
+    if(!Array.isArray(payload.entries))throw Error('Recovery snapshots could not be read.');
+    return payload.entries.flatMap(entry=>{
+      try{return [{...entry,project:migrateProject(entry.project)}];}catch{return [];}
+    });
+  }
+  checkpoint(project,reason='Automatic recovery'){
+    const normalized=migrateProject(project),entries=this.checkpoints();
+    const previous=entries.find(entry=>entry.project.id===project.id);
+    if(previous&&JSON.stringify(previous.project)===JSON.stringify(normalized))return null;
+    const createdAt=new Date().toISOString();
+    const entry={id:createdAt+'-'+Math.random().toString(36).slice(2),createdAt,reason,project:normalized};
+    const next=[entry,...entries.filter(item=>item.project.id!==project.id).slice(0,24),
+      ...entries.filter(item=>item.project.id===project.id).slice(0,5)].sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,30);
+    // Keep the newest recoverable edit when older snapshots exhaust storage.
+    while(true){
+      try{
+        this.storage.setItem(this.key+'-checkpoints',encode({entries:next},Date.now()));
+        break;
+      }catch(error){
+        if(next.length===1)throw error;
+        next.pop();
+      }
+    }
+    return entry;
+  }
+  removeCheckpoints(projectId){
+    const entries=this.checkpoints().filter(entry=>entry.project.id!==projectId);
+    this.storage.setItem(this.key+'-checkpoints',encode({entries},Date.now()));
+  }
+}
 const root=document.getElementById('oc93');if(root.dataset.ready)return;root.dataset.ready='1';
 const pcs={C:0,D:2,E:4,F:5,G:7,A:9,B:11},names=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
-const toMidi=s=>{const m=s.match(/^([A-G])(#?)(\d)$/);return (+m[3]+1)*12+pcs[m[1]]+(m[2]?1:0)};
+
 const score={
 events:[],tempo:130,tempoMap:[],meter:'4/4',key:'C',
 get pitches(){return this.events.map(e=>e.pitch);},
@@ -36,7 +262,7 @@ splice(index,remove,events=[]){
 this.events.splice(index,remove,...events.map(e=>({...e,ms:e.ms??null})));
 }
 };
-const name=m=>m===null?'Rest':names[((m%12)+12)%12]+(Math.floor(m/12)-1),hz=m=>440*Math.pow(2,(m-69)/12);
+const name=pitchName,hz=m=>440*Math.pow(2,(m-69)/12);
 const pads=[];
 function renderPads(){
 const grid=find('sequence');
@@ -555,6 +781,11 @@ catch{share.focus();share.select();status.textContent=document.execCommand('copy
 const projectStatus=find('project-status'), projectMenu=find('projects'), projectName=find('project-name'), authorInput=find('author');
 const pitchEditor=find('edit-pitch'), beatsEditor=find('edit-beats');
 const storageKey='ocarina-song-mapper-v1';
+const projectStorage=new ProjectStore({
+getItem:key=>localStorage.getItem(key),
+setItem:(key,value)=>localStorage.setItem(key,value),
+removeItem:key=>localStorage.removeItem(key)
+});
 let projects=[], projectId=null, draftChanged=false, scoreActivity=[];
 const maxScoreActivity=30;
 function renderScoreActivity(){
@@ -586,28 +817,14 @@ const link=document.createElement('a');link.href=url;link.download=filename;link
 setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
-function meterTicks(value){
-const match=typeof value==='string'&&value.match(/^([1-9]|1[0-9]|2[0-4])\/(2|4|8|16)$/);
-return match?16*Number(match[1])/Number(match[2]):0;
-}
-const ScoreModel={
-validate(p){
-return Boolean(p&&typeof p.id==='string'&&typeof p.title==='string'&&
-(p.author===undefined||typeof p.author==='string')&&Array.isArray(p.notes)&&p.notes.every(Music.validPitch)&&
-Array.isArray(p.lengths)&&p.lengths.length===p.notes.length&&p.lengths.every(n=>Number.isFinite(n)&&n>0)&&
-Number.isFinite(p.tempo)&&p.tempo>=20&&p.tempo<=400&&Array.isArray(p.intervals)&&
-(p.tempoMap===undefined||(Array.isArray(p.tempoMap)&&p.tempoMap.every((mark,i)=>mark&&Number.isFinite(mark.tick)&&mark.tick>=0&&Number.isFinite(mark.bpm)&&mark.bpm>0&&(!i||mark.tick>p.tempoMap[i-1].tick))))&&
-(p.performance===undefined||(Array.isArray(p.performance)&&p.performance.length===p.notes.length&&p.performance.every(e=>e&&(e.velocity===undefined||(Number.isInteger(e.velocity)&&e.velocity>=1&&e.velocity<=127))&&(e.muted===undefined||typeof e.muted==='boolean'))))&&
-p.intervals.length<=p.notes.length&&p.intervals.every(n=>n===null||(Number.isFinite(n)&&n>0)));
-}
-};
+const ScoreModel={validate:validateProject};
 const keySignatures={Cb:-7,Gb:-6,Db:-5,Ab:-4,Eb:-3,Bb:-2,F:-1,C:0,G:1,D:2,A:3,E:4,B:5,'F#':6,'C#':7};
 function signatureAccidental(letter){
 const count=keySignatures[score.key];
 return (count<0?'BEADGCF':'FCGDAEB').slice(0,Math.abs(count)).includes(letter)?(count<0?'_':'^'):'=';
 }
 function snapshot(){
-return {id:projectId,title:projectName.value.trim()||'Untitled song',author:authorInput.value.trim(),notes:[...score.pitches],
+return {schemaVersion:1,appVersion:'0.2.0',id:projectId,title:projectName.value.trim()||'Untitled song',author:authorInput.value.trim(),notes:[...score.pitches],
 lengths:[...score.lengths],tempo:score.tempo,tempoMap:score.tempoMap.map(mark=>({...mark})),meter:score.meter,key:score.key,intervals:Array.from(score.intervals,n=>n??null),
 performance:score.events.map(({velocity,muted})=>({velocity,muted})),
 activity:scoreActivity.slice(),
@@ -615,27 +832,16 @@ tabDraft:nativeTabProject===projectId?nativeTabDraft():readNativeTabDraft(projec
 }
 function validProject(project){return ScoreModel.validate(project);}
 function restoreSavedProjects(){
-let raw;
-try{raw=localStorage.getItem(storageKey);}catch{return;}
-if(!raw)return;
 try{
-const saved=JSON.parse(raw);
-if(!Array.isArray(saved?.projects))throw Error('Invalid library');
-const recovered=saved.projects.filter(validProject);
-if(recovered.length!==saved.projects.length){
-localStorage.setItem(storageKey+'-recovery',raw);
-report('Some saved scores could not be opened. A recovery copy was kept.');
-}
-projects=recovered.filter(project=>project.id!=='starter');
-projectId=saved.active;
-}catch{
-try{if(!localStorage.getItem(storageKey+'-recovery'))localStorage.setItem(storageKey+'-recovery',raw);}catch{}
-report('The saved library could not be read. You can restore scores from a project backup.');
-}
+const saved=projectStorage.read();
+projects=saved.projects;projectId=saved.active;
+if(saved.recovered)report('Recovered saved data. Open File → Recovery snapshots to review your work.');
+else if(saved.issues.length)report(saved.issues[0]);
+}catch(error){report('Saved scores could not be loaded. '+error.message);}
 }
 function persist(library=projects,active=projectId){
-try{localStorage.setItem(storageKey,JSON.stringify({projects:library,active}));return true;}
-catch{report('Local storage is unavailable. Export the project to save a backup.');return false;}
+try{return projectStorage.save(library,active);}
+catch(error){report('Save failed. '+error.message+' Download a project backup to keep your changes.');return false;}
 }
 const recentScoreMenu=find('recent-score-menu');
 let recentScoreTarget;
@@ -673,6 +879,7 @@ if(!window.confirm(message))return false;
 const remaining=projects.filter(saved=>saved.id!==project.id);
 if(!persist(remaining,active?null:projectId))return false;
 projects=remaining;
+try{projectStorage.removeCheckpoints(project.id);}catch{}
 try{localStorage.removeItem(nativeTabKey(project.id));}catch{}
 if(active)loadProject(emptyProject());
 else refreshMenu();
@@ -732,7 +939,7 @@ recent.append(...ordered.slice(0,6).map(project=>scoreRow(project,true)));
 let currentPage='home';
 function openPage(page){
 if(currentPage==='practice'&&page!==currentPage){stopStep();find('practice-metronome').checked=false;stopPracticeClick();}
-if(currentPage!==page){closeRecentScoreMenu();if(currentPage==='editor')rollWindow.close();if(currentPage==='practice-setup')leaveRecognition();pdfRequest++;report('');stopMic('Microphone stopped.');closeNoteMenu();}
+if(currentPage!==page){flushRecoverySnapshot();closeRecentScoreMenu();if(currentPage==='editor')rollWindow.close();if(currentPage==='practice-setup')leaveRecognition();pdfRequest++;report('');stopMic('Microphone stopped.');closeNoteMenu();}
 if(currentPage!==page&&(currentPage==='editor'||currentPage==='palette'))stopSound();
 for(const id of ['home','library','import','palette','editor','help','tuner','practice','practice-setup'])find('page-'+id).hidden=id!==page;
 find('home-nav').hidden=['home','practice-setup','palette','tuner','help'].includes(page);
@@ -758,6 +965,8 @@ bar.style.width='0%';
 if(currentPage==='editor')updateWorkspace();
 }
 function loadProject(p){
+flushRecoverySnapshot();
+p=migrateProject(p);
 finishRecording();stopSound();
 if(micSession?.mode==='convert')stopMic();
 capturedSound=[];soundNote=null;find('convert-use').disabled=true;
@@ -779,13 +988,13 @@ historyPast.length=0;historyFuture.length=0;lastScore=captureEdit();updateHistor
 }
 function canReplace(){return !draftChanged||window.confirm('Discard unsaved song changes?');}
 find('save').addEventListener('click',()=>{
-const project=snapshot();
+const project=migrateProject(snapshot());
 project.activity=[...project.activity,{label:'Saved score',at:new Date().toISOString()}].slice(-maxScoreActivity);
 const next=projects.filter(saved=>saved.id!==projectId).concat(project);
 if(!persist(next))return;
 projects=next;scoreActivity=project.activity;renderScoreActivity();
 projectName.value=project.title;refreshMenu();updateWorkspace();
-draftChanged=false;report('Saved '+project.title+'.');
+draftChanged=false;flushRecoverySnapshot('Saved score');report('Saved '+project.title+'.');
 });
 const renameDialog=find('rename-score');
 let previousTitle,previousAuthor;
@@ -803,7 +1012,7 @@ projectName.value=projectName.value.trim()||'Untitled song';
 authorInput.value=authorInput.value.trim();
 if(projectName.value===previousTitle&&authorInput.value===previousAuthor)return;
 draftChanged=true;
-addScoreActivity('Updated title or author');
+addScoreActivity('Updated title or author');scheduleRecoverySnapshot();
 updateWorkspace();
 if(!find('score').hidden&&!recording)updateNotation();
 });
@@ -821,7 +1030,8 @@ find('restore').addEventListener('change',async e=>{
 const file=e.target.files[0];e.target.value='';
 if(!file)return;
 try{
-const project=JSON.parse(await file.text());
+await assertImportFile(file,'project');
+const project=migrateProject(JSON.parse(await file.text()));
 if(!validProject(project))throw Error('This file is not an Ocarina Song Mapper project.');
 if(canReplace()){const restored={...project,id:newId()};loadProject(restored);if(typeof restored.tabDraft?.text==='string'){try{localStorage.setItem(nativeTabKey(restored.id),JSON.stringify(restored.tabDraft));}catch{}}draftChanged=true;openPage('editor');report('Project imported. Click Save project to keep it in the menu.');}
 }catch(error){report(error.message);}
@@ -871,7 +1081,7 @@ selectFingering(69);
 function edited(index,structure=false){
 stopSound();
 if(structure){finishRecording();take=[];find('score').hidden=true;}
-draftChanged=true;refreshSong(index);rememberEdit();
+draftChanged=true;refreshSong(index);rememberEdit();scheduleRecoverySnapshot();
 if(!find('score').hidden)showScore(false);
 }
 pitchEditor.addEventListener('change',()=>{
@@ -899,7 +1109,76 @@ edited(i,true);
 find('earlier').addEventListener('click',()=>move(-1));
 find('later').addEventListener('click',()=>move(1));
 
+const ImportLimits=Object.freeze({
+  project:20*1024*1024,tabs:20*1024*1024,image:20*1024*1024,
+  midi:10*1024*1024,musicxml:1024*1024,audio:50*1024*1024,
+  text:1024*1024,pixels:12000000,pdfPages:30
+});
+function assertImportText(text,label='Notation'){
+  if(typeof text!=='string'||text.length>ImportLimits.text||new TextEncoder().encode(text).byteLength>ImportLimits.text){
+    throw Error(label+' is too large. Import up to 1 MiB of text at a time.');
+  }
+}
+async function assertImportFile(file,kind){
+  const maximum=ImportLimits[kind];
+  if(!file||!Number.isFinite(file.size)||file.size<=0)throw Error('Choose a file containing data.');
+  if(!maximum||file.size>maximum){
+    throw Error('This file is too large. Import up to '+Math.round(maximum/1024/1024)+' MiB at a time.');
+  }
+  const header=new Uint8Array(await file.slice(0,16).arrayBuffer());
+  const ascii=String.fromCharCode(...header);
+  if(kind==='midi'&&!ascii.startsWith('MThd'))throw Error('Choose a valid Standard MIDI file.');
+  if(kind==='project'&&!/\.json$/i.test(file.name))throw Error('Choose an OSM JSON project backup.');
+  if(kind==='musicxml'&&!/\.(xml|musicxml)$/i.test(file.name))throw Error('Choose an uncompressed XML or MusicXML file.');
+  if(kind==='audio'){
+    const wav=ascii.startsWith('RIFF')&&ascii.slice(8,12)==='WAVE';
+    const mp3=ascii.startsWith('ID3')||(header[0]===255&&(header[1]&224)===224);
+    if(!wav&&!mp3)throw Error('Choose a valid WAV or MP3 recording.');
+  }
+  return header;
+}
+function assertImageDimensions(width,height){
+  if(!(width>0&&height>0)||!Number.isFinite(width*height)||width*height>ImportLimits.pixels){
+    throw Error('Use an image up to 12 megapixels. Crop it to the tab area or resize it and try again.');
+  }
+}
+async function assertImportImage(file,allowWebP=false){
+  await assertImportFile(file,'image');
+  const bytes=new Uint8Array(await file.slice(0,262144).arrayBuffer());
+  const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+  const ascii=String.fromCharCode(...bytes.subarray(0,16));
+  if(bytes.subarray(0,8).join(',')==='137,80,78,71,13,10,26,10'){
+    if(bytes.length<24)throw Error('This PNG is incomplete.');
+    assertImageDimensions(view.getUint32(16),view.getUint32(20));return;
+  }
+  if(bytes[0]===255&&bytes[1]===216&&bytes[2]===255){
+    let offset=2;
+    while(offset+4<=bytes.length&&bytes[offset]===255){
+      const marker=bytes[offset+1];
+      if(marker===217||marker===218)break;
+      if(marker===255){offset++;continue;}
+      const length=view.getUint16(offset+2);
+      if(length<2)throw Error('This JPEG has an invalid segment.');
+      if([192,193,194,195,197,198,199,201,202,203,205,206,207].includes(marker)){
+        if(offset+9>bytes.length)throw Error('This JPEG is incomplete.');
+        assertImageDimensions(view.getUint16(offset+7),view.getUint16(offset+5));return;
+      }
+      offset+=length+2;
+    }
+    return;
+  }
+  if(allowWebP&&ascii.startsWith('RIFF')&&ascii.slice(8,12)==='WEBP'){
+    if(ascii.slice(12,16)==='VP8X'&&bytes.length>=30){
+      const dimension=index=>1+bytes[index]+bytes[index+1]*256+bytes[index+2]*65536;
+      assertImageDimensions(dimension(24),dimension(27));
+    }
+    return;
+  }
+  throw Error(allowWebP?'Choose a valid PNG, JPEG, or WebP image.':'Choose a valid PNG or JPG image.');
+}
+
 function parseABC(abc){
+assertImportText(abc,'ABC notation');
 const tunes=window.ABCJS.parseOnly(abc);
 if(tunes.length!==1)throw Error('Import one ABC tune at a time.');
 const tune=tunes[0];
@@ -954,6 +1233,7 @@ tie=Boolean(note?.startTie);elapsed+=duration;
 return {pitches,lengths,tempoMap};
 }
 function parseSong(input){
+assertImportText(input);
 const source=input.trim().replace(/\\(?=\r?$)/gm,'').replace(/\\=/g,'=');
 if(!source)throw Error('Paste note names or ABC notation first.');
 if(!/^X:/m.test(source)){
@@ -1080,7 +1360,7 @@ const nativeTabTitle=find('native-tab-title');
 const nativeTabCredit=find('native-tab-credit');
 const nativeTabSize=find('native-tab-size');
 const nativeTabStatus=find('native-tab-status');
-let nativeTabProject=null,initialTabDraft=null,nativeTabActivity=[],lastTabEdit=null;
+let nativeTabProject=null,initialTabDraft=null,nativeTabActivity=[],lastTabEdit=null,nativeTabRaw=null;
 let tabPlaybackCells=[],tabPlaybackCell=null,tabStepIndex=-1;
 
 function nativeTabKey(id){return 'osm-tab-draft-v1:'+id;}
@@ -1104,13 +1384,18 @@ if(label)lastTabEdit={label,time:now};
 initialTabDraft=nativeTabDraft();
 let saved=true;
 try{
-localStorage.setItem(nativeTabKey(nativeTabProject),JSON.stringify(initialTabDraft));
+const key=nativeTabKey(nativeTabProject),raw=JSON.stringify(initialTabDraft);
+if(localStorage.getItem(key)!==nativeTabRaw)throw Error('Another OSM tab changed this tab draft. Download a project backup, then reload.');
+localStorage.setItem(key,raw);
+if(localStorage.getItem(key)!==raw)throw Error('The tab draft could not be verified.');
+nativeTabRaw=raw;
 nativeTabStatus.textContent=projects.some(project=>project.id===nativeTabProject)
   ?'Tab draft saved in this browser.'
   :'Save the score to reopen this draft from Recent scores.';
-}catch{saved=false;nativeTabStatus.textContent='Browser storage is full or unavailable. Download a project backup to keep these changes.';}
+}catch(error){saved=false;nativeTabStatus.textContent=error.message+' Download a project backup to keep these changes.';}
 renderScoreActivity();
 updatePlaybackAvailability();
+scheduleRecoverySnapshot();
 return saved;
 }
 function updateNativeTabStyle(){
@@ -1122,6 +1407,7 @@ if(!initialTabDraft&&!nativeTabText.readOnly)nativeTabText.value=defaultTabLayou
 return;
 }
 nativeTabProject=projectId;
+try{nativeTabRaw=localStorage.getItem(nativeTabKey(projectId));}catch{nativeTabRaw=null;}
 tabStepIndex=-1;
 const draft=readNativeTabDraft(projectId)??initialTabDraft;
 loadPaperLayouts(draft?.paperLayouts);
@@ -1802,12 +2088,14 @@ const file=event.target.files[0];event.target.value='';
 if(!file)return;
 const project=projectId,kind=previewKind.value;
 try{
+await assertImportImage(file,true);
 const src=await new Promise((resolve,reject)=>{
 const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(Error('This image could not be read.'));
 reader.readAsDataURL(file);
 });
 if(!/^data:image\/(png|jpeg|webp);base64,/.test(src))throw Error('Choose a PNG, JPEG, or WebP image.');
 const image=await paperImage(src);
+assertImageDimensions(image.width,image.height);
 const canvas=document.createElement('canvas'),scale=Math.min(1,2400/Math.max(image.width,image.height));
 canvas.width=Math.max(1,Math.round(image.width*scale));canvas.height=Math.max(1,Math.round(image.height*scale));
 canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
@@ -1963,29 +2251,9 @@ for(const sample of samples)energy+=sample*sample;
 return Math.sqrt(energy/samples.length);
 }
 function estimatePitch(samples,rate){
-pitchConfidence=0;
-let energy=0;
-for(const sample of samples)energy+=sample*sample;
-if(Math.sqrt(energy/samples.length)<.006)return 0;
-const maxLag=Math.floor(rate/180),minLag=Math.floor(rate/1800);
-const length=Math.min(768,samples.length-maxLag-1);
-if(length<=0)return 0;
-const values=new Float32Array(maxLag+1);
-let total=0;
-for(let lag=1;lag<=maxLag;lag++){
-let sum=0;
-for(let i=0;i<length;i+=2){const diff=samples[i]-samples[i+lag];sum+=diff*diff;}
-total+=sum;values[lag]=total?sum*lag/total:1;
-}
-for(let lag=minLag;lag<maxLag;lag++){
-if(values[lag]>.17)continue;
-while(lag<maxLag-1&&values[lag+1]<values[lag])lag++;
-const a=values[lag-1],b=values[lag],c=values[lag+1];
-const offset=a+c===2*b?0:(a-c)/(2*(a+c-2*b));
-pitchConfidence=1-b;
-return rate/(lag+Math.max(-.5,Math.min(.5,offset)));
-}
-return 0;
+const result=detectPitch(samples,rate);
+pitchConfidence=result.confidence;
+return result.frequency;
 }
 function stopMic(message){
 const session=micSession;
@@ -2606,6 +2874,8 @@ holeMenu.addEventListener('keydown',event=>{
     (document.activeElement===fillHoles?clearHoles:fillHoles).focus();
   }
 });
+// Keep menu focus while a pointer activates a button, including macOS Safari.
+holeMenu.addEventListener('pointerdown',event=>{if(event.button===0)event.preventDefault();});
 holeMenu.addEventListener('focusout',event=>{
   if(!holeMenu.contains(event.relatedTarget))closeHoleMenu();
 });
@@ -3140,6 +3410,8 @@ tutorialSteps.splice(tutorialSteps.findIndex(step=>step[3]==='Keep a project bac
   'Insert an image or text box from the page editor toolbar. Select it on the page, drag to move it, and drag the lower-right corner to resize it. Objects offers exact coordinates, dimensions, opacity, rotation, text styling, page placement, repetition, locking, and front or back layers. Delete removes an object, and Command-Z or Control-Z undoes a layout edit.'],
  ['Export','editor','[data-editor-command="score-preview"]','Save a page design',
   'File → Export PDF inside the page editor exports the view you are looking at. Formatting is also used by the score PDF and Tab editor PDF buttons. Save score keeps the project, and a project backup includes your images and both page layouts. Tab line breaks and spaces stay intact when a wide row is fitted to paper.']);
+tutorialSteps.push(['Export','home','#oc93-recovery-open','Recover recent edits',
+'OSM keeps recent recovery snapshots as you edit. Recover work opens snapshots from this browser, including unsaved notes and page layouts. Restore copy opens a separate score. Download backup keeps your work outside browser storage. Clearing site data removes both saved scores and snapshots.']);
 let tutorialIndex=0,tutorialTarget=null;
 const tutorialTopic=find('tour-topic');
 for(const topic of new Set(tutorialSteps.map(step=>step[0])))tutorialTopic.add(new Option(topic,topic));
@@ -3451,6 +3723,7 @@ return rows.flatMap(row=>row.sort((a,b)=>a.l-b.l).map(box=>box.pitch));
 }
 
 async function readTabPitches(file){
+await assertImportFile(file,'tabs');
 if(!window.pdfjsLib)await loadAsset('pdf-reader.js');
 const embedded=document.getElementById('osm-pdf-worker');
 const workerURL=embedded?URL.createObjectURL(new Blob([embedded.textContent],{type:'text/javascript'})):'./pdf-worker.js';
@@ -3459,14 +3732,15 @@ try{
 window.pdfjsLib.GlobalWorkerOptions.workerSrc=workerURL;
 task=window.pdfjsLib.getDocument({data:new Uint8Array(await file.arrayBuffer()),isEvalSupported:false,disableFontFace:true});
 const pdf=await task.promise;
+if(pdf.numPages>ImportLimits.pdfPages)throw Error('Upload up to 30 pages at a time.');
 const {info}=await pdf.getMetadata();
 const prefix='osm-tab-draft-v1:';
 if(info?.Keywords?.startsWith(prefix)){
 const text=decodeURIComponent(info.Keywords.slice(prefix.length));
+assertImportText(text,'Tab layout');
 return {layout:text,pitches:[...text.matchAll(/[A-Ur]/g)].map(([code])=>nativeTabPitch(code))};
 }
 const labels=new Map();
-if(pdf.numPages>30)throw Error('Upload up to 30 pages at a time.');
 for(let i=1;i<=pdf.numPages;i++){
 const page=await pdf.getPage(i);
 const content=await page.getTextContent();
@@ -3482,7 +3756,10 @@ if(!labels.size){
 const scanned=[];
 for(let i=1;i<=pdf.numPages;i++){
 const page=await pdf.getPage(i);
-const viewport=page.getViewport({scale:Math.min(3,1800/page.getViewport({scale:1}).width)});
+const original=page.getViewport({scale:1});
+assertImageDimensions(original.width,original.height);
+const scale=Math.min(3,1800/original.width,Math.sqrt(ImportLimits.pixels/(original.width*original.height)));
+const viewport=page.getViewport({scale});
 const canvas=document.createElement('canvas');canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);
 const context=canvas.getContext('2d',{willReadFrequently:true});
 await page.render({canvasContext:context,viewport}).promise;
@@ -3613,6 +3890,7 @@ return scores[0].midi;
 });
 }
 function parseTabText(text){
+assertImportText(text,'Tab layout');
 const layout=text.replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n');
 if(!/^[A-Ur|. :;()\[\]–—\-\s]+$/.test(layout)||!/[A-U]/.test(layout)){
 throw Error('Choose a tab text file saved by the OSM Tab editor.');
@@ -3620,12 +3898,14 @@ throw Error('Choose a tab text file saved by the OSM Tab editor.');
 return {layout,pitches:[...layout.matchAll(/[A-Ur]/g)].map(([code])=>nativeTabPitch(code))};
 }
 async function readPracticeTab(file,active){
+await assertImportFile(file,'tabs');
 if(/\.txt$/i.test(file.name))return parseTabText(await file.text());
 const signature=new Uint8Array(await file.slice(0,8).arrayBuffer());
 if((signature.join(',')==='137,80,78,71,13,10,26,10'||(signature[0]===255&&signature[1]===216&&signature[2]===255))){
+await assertImportImage(file);
 const bitmap=await createImageBitmap(file);
 try{
-if(bitmap.width*bitmap.height>12000000)throw Error('Crop the PNG to the tab area and try again.');
+assertImageDimensions(bitmap.width,bitmap.height);
 const canvas=document.createElement('canvas');
 canvas.width=bitmap.width;canvas.height=bitmap.height;
 const context=canvas.getContext('2d',{willReadFrequently:true});
@@ -3715,6 +3995,7 @@ find('practice-file').addEventListener('change',async e=>{
 const file=e.target.files[0];e.target.value='';
 if(!file)return;
 try{
+await assertImportFile(file,'project');
 const project=JSON.parse(await file.text());
 if(!validProject(project)||!project.notes.length)throw Error('Choose a project backup containing notes.');
 if(currentPage==='practice-setup')showPractice(project.notes,'practice-setup',project.lengths);
@@ -3819,7 +4100,7 @@ function restoreEdit(from,to){
   score.load(state);find("meter").value=score.meter;find("score-key").value=score.key;find("editor-tempo").value=score.tempo;
   lastScore=captureEdit();draftChanged=true;
   addScoreActivity(from===historyPast?'Undid edit':'Redid edit');
-  refreshSong(state.position);updateHistoryButtons();drawTimeline();
+  refreshSong(state.position);scheduleRecoverySnapshot();updateHistoryButtons();drawTimeline();
   if(!find('score').hidden)showScore(false);
 }
 find('undo').onclick=()=>restoreEdit(historyPast,historyFuture);
@@ -3924,7 +4205,11 @@ function inputMeter(samples){
 
 
 function readMusicXML(xml){
-  const doc=new DOMParser().parseFromString(xml,'application/xml');
+  assertImportText(xml,'MusicXML');
+  if(/<!ENTITY/i.test(xml))throw Error('Export MusicXML without internal entity declarations.');
+  const safeXML=xml.replace(/<!DOCTYPE\s+score-partwise(?:\s+(?:PUBLIC\s+["'][^"']*["']\s+["'][^"']*["']|SYSTEM\s+["'][^"']*["']))?\s*>/gi,'');
+  if(/<!DOCTYPE/i.test(safeXML))throw Error('MusicXML internal document-type subsets are unsupported.');
+  const doc=new DOMParser().parseFromString(safeXML,'application/xml');
   const parts=doc.querySelectorAll('score-partwise > part');
   if(parts.length>1)throw Error('Export the ocarina melody as a single MusicXML part before importing.');
   const part=parts[0];
@@ -3936,6 +4221,7 @@ function readMusicXML(xml){
     for(const item of measure.children){
       if(item.localName==='attributes'){
 divisions=Number(item.querySelector('divisions')?.textContent??divisions);
+if(!Number.isFinite(divisions)||divisions<=0)throw Error('Invalid MusicXML divisions.');
 const fifths=item.querySelector('key > fifths');
 if(fifths){
 const signature=Object.keys(keySignatures).find(name=>keySignatures[name]===Number(fifths.textContent));
@@ -4021,27 +4307,31 @@ find('musicxml-export').onclick=()=>{if(score.events.length)download('ocarina.mu
 find('musicxml-file').onchange=async event=>{
   const file=event.target.files[0];event.target.value='';
   if(!file)return;
+  const request=++pdfRequest;
   try{
+    await assertImportFile(file,'musicxml');
     const imported=readMusicXML(await file.text());
     const score={...imported,id:newId(),title:imported.title||file.name.replace(/\.[^.]+$/,''),author:imported.author||''};
-    if(currentPage!=='import')return;
+    if(currentPage!=='import'||request!==pdfRequest)return;
     if(!score.notes.length||!validProject(score))throw Error('No supported melody found.');
     if(!canReplace())return;
     loadProject(score);draftChanged=true;openPage('editor');
-  }catch(error){if(currentPage==='import')report(error.message);}
+  }catch(error){if(currentPage==='import'&&request===pdfRequest)report(error.message);}
 };
 find('audio-file').onchange=async event=>{
   const file=event.target.files[0];event.target.value='';
   if(!file)return;
   const Audio=window.AudioContext||window.webkitAudioContext;
+  const request=++pdfRequest;
   let ctx;
   try{
+    await assertImportFile(file,'audio');
     if(micSession)stopMic();
     ctx=new Audio();
     report('Analyzing solo recording…');
     const buffer=await ctx.decodeAudioData(await file.arrayBuffer());
     if(buffer.duration>180)throw Error('Use a solo recording under three minutes.');
-    if(currentPage!=='import')return;
+    if(currentPage!=='import'||request!==pdfRequest)return;
     capturedSound=[];soundNote=null;soundCandidate=null;soundEnd=0;
     const samples=buffer.getChannelData(0),windowSize=2048;
     const step=Math.round(buffer.sampleRate*.02);
@@ -4050,10 +4340,10 @@ find('audio-file').onchange=async event=>{
       const hz=estimatePitch(frame,buffer.sampleRate);
       const exact=hz?69+12*Math.log2(hz/440):null,midi=exact===null?null:Math.round(exact);
       captureSoundFrame(midi,hz,midi===null?0:Math.round((exact-midi)*100),offset/buffer.sampleRate*1000);
-      if(offset%(step*40)===0){await new Promise(resolve=>setTimeout(resolve,0));if(currentPage!=='import')return;}
+      if(offset%(step*40)===0){await new Promise(resolve=>setTimeout(resolve,0));if(currentPage!=='import'||request!==pdfRequest)return;}
     }
     find('convert-open').open=true;stopSoundCapture();report('');
-  }catch(error){if(currentPage==='import')report(error.message);}
+  }catch(error){if(currentPage==='import'&&request===pdfRequest)report(error.message);}
   finally{await ctx?.close().catch(()=>{});}
 };
 
@@ -4061,10 +4351,14 @@ function readMIDI(bytes){
   const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
   const tag=i=>String.fromCharCode(...bytes.subarray(i,i+4));
   if(bytes.length<14||tag(0)!=='MThd')throw Error('Invalid MIDI header.');
+  const headerLength=view.getUint32(4);
+  if(headerLength<6||8+headerLength>bytes.length)throw Error('Incomplete MIDI header.');
   const division=view.getUint16(12), tracks=view.getUint16(10);
+  if(!tracks||tracks>256)throw Error('Import a MIDI file with 1 to 256 tracks.');
   if(!division||division&32768)throw Error('MIDI must use beats as its time base.');
   const format=view.getUint16(8);
   if(format>1)throw Error('MIDI format 2 sequences are unsupported.');
+  if(format===0&&tracks!==1)throw Error('MIDI format 0 must contain one track.');
   const tempoEvents=new Map([[0,500000]]);
   let offset=8+view.getUint32(4);
   const melodies=[];
@@ -4078,9 +4372,11 @@ function readMIDI(bytes){
     const active=new Map(),events=[];
     while(offset<end){
       tick+=vlq();
+      if(!Number.isSafeInteger(tick))throw Error('MIDI timing exceeds the supported range.');
       let command=byte();
       if(command<128){offset--;command=status;}
       if(command===255){
+        status=0;
         const kind=byte(),length=vlq();
         if(offset+length>end)throw Error('Incomplete MIDI metadata.');
         if(kind===81&&length===3){
@@ -4089,10 +4385,15 @@ function readMIDI(bytes){
         }
         offset+=length;continue;
       }
-      if(command===240||command===247){const length=vlq();offset+=length;continue;}
+      if(command===240||command===247){
+        status=0;const length=vlq();
+        if(offset+length>end)throw Error('Incomplete MIDI system event.');
+        offset+=length;continue;
+      }
       if(command<128||command>=240)throw Error('Unsupported MIDI event.');
       status=command;
       const kind=command>>4,key=byte(),velocity=kind===12||kind===13?0:byte();
+      if(key>127||velocity>127)throw Error('Invalid MIDI data byte.');
       if((command&15)===9)continue;
       const id=(command&15)*128+key;
       if(kind===9&&velocity){active.set(id,tick);continue;}
@@ -4136,6 +4437,7 @@ if(!file)return;
 pendingMIDI=null;find('midi-picker').hidden=true;
 const request=++pdfRequest;
 try{
+await assertImportFile(file,'midi');
 const scores=readMIDI(new Uint8Array(await file.arrayBuffer()));
 if(currentPage!=='import'||request!==pdfRequest)return;
 pendingMIDI={scores,title:file.name.replace(/\.[^.]+$/,'')};
@@ -4263,6 +4565,7 @@ menuBar.addEventListener('click',event=>{
   summaryButton.focus({preventScroll:true});
   if(command.startsWith('@'))openPage(command.slice(1));
   else if(command==='score-preview')openScorePreview();
+  else if(command==='recovery')openRecovery();
   else if(command==='rename-score')openRenameScore();
   else if(command==='delete-score'){
     const saved=projects.find(project=>project.id===projectId);
@@ -4612,6 +4915,67 @@ for(const handle of rollWindow.querySelectorAll('[data-roll-size]')){
   });
   handle.addEventListener('lostpointercapture',()=>{handle.onpointermove=null;});
 }
+
+let recoveryTimer=null,recoveryDirty=false,recoveryRestoring=false;
+function scheduleRecoverySnapshot(){
+if(recoveryRestoring||projectId===null)return;
+recoveryDirty=true;
+clearTimeout(recoveryTimer);
+recoveryTimer=setTimeout(flushRecoverySnapshot,750);
+}
+function flushRecoverySnapshot(reason='Automatic recovery'){
+clearTimeout(recoveryTimer);recoveryTimer=null;
+if(!recoveryDirty||recoveryRestoring||projectId===null)return;
+try{
+projectStorage.checkpoint(snapshot(),typeof reason==='string'?reason:'Automatic recovery');
+recoveryDirty=false;
+}catch(error){
+report('Automatic recovery could not be saved. Download a project backup. '+error.message);
+}
+}
+function openRecovery(){
+flushRecoverySnapshot();
+const list=find('recovery-list'),status=find('recovery-status');
+list.replaceChildren();status.textContent='';
+const original=find('recovery-original');
+original.hidden=true;
+try{
+const raw=localStorage.getItem(storageKey+'-recovery')??(projectStorage.blocked?localStorage.getItem(storageKey):null);
+if(raw){original.hidden=false;original.onclick=()=>download('osm-original-saved-data.json',raw);}
+}catch{}
+try{
+const entries=projectStorage.checkpoints();
+if(!entries.length)status.textContent='No recovery snapshots yet. Snapshots are created as you edit.';
+for(const entry of entries){
+const row=document.createElement('div');row.className='osm-recovery-row';
+const description=document.createElement('span');
+description.textContent=entry.project.title+' · '+entry.project.notes.length+' notes · '+new Date(entry.createdAt).toLocaleString();
+const restore=document.createElement('button');restore.type='button';restore.className='ctrl';restore.textContent='Restore copy';
+restore.onclick=()=>{
+flushRecoverySnapshot();
+recoveryRestoring=true;
+try{
+const project=migrateProject(entry.project);
+project.id=newId();project.title+=' (recovered)';
+loadProject(project);draftChanged=true;
+find('recovery').close();openPage('editor');
+report('Recovered copy opened. Save score to keep it in Recent scores.');
+}finally{recoveryRestoring=false;}
+scheduleRecoverySnapshot();
+};
+const backup=document.createElement('button');backup.type='button';backup.className='ctrl';backup.textContent='Download backup';
+backup.onclick=()=>download('ocarina-recovery.json',JSON.stringify(entry.project,null,2));
+row.append(description,restore,backup);list.append(row);
+}
+}catch(error){status.textContent=error.message;}
+find('recovery').showModal();
+}
+find('recovery-open').onclick=openRecovery;
+window.addEventListener('pagehide',flushRecoverySnapshot);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)flushRecoverySnapshot();});
+window.addEventListener('storage',event=>{
+if(event.key===storageKey&&event.newValue)report('Another OSM tab updated saved scores. Download a backup of current edits, then reload before saving.');
+});
 
 restoreSavedProjects();
 loadProject(projects.find(p=>p.id===projectId)??projects[0]??emptyProject());

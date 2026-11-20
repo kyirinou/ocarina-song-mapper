@@ -114,12 +114,14 @@ const file=event.target.files[0];event.target.value='';
 if(!file)return;
 const project=projectId,kind=previewKind.value;
 try{
+await assertImportImage(file,true);
 const src=await new Promise((resolve,reject)=>{
 const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(Error('This image could not be read.'));
 reader.readAsDataURL(file);
 });
 if(!/^data:image\/(png|jpeg|webp);base64,/.test(src))throw Error('Choose a PNG, JPEG, or WebP image.');
 const image=await paperImage(src);
+assertImageDimensions(image.width,image.height);
 const canvas=document.createElement('canvas'),scale=Math.min(1,2400/Math.max(image.width,image.height));
 canvas.width=Math.max(1,Math.round(image.width*scale));canvas.height=Math.max(1,Math.round(image.height*scale));
 canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);

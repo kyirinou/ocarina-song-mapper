@@ -1,27 +1,6 @@
-const Music = {
-  tempo(onsets) {
-    const gaps=onsets.slice(1).map((t,i)=>t-onsets[i]).filter(t=>t>=160&&t<=1600);
-    if(!gaps.length)return 120;
-    let best={cost:Infinity,bpm:120};
-    for(let bpm=55;bpm<=190;bpm++){
-      const beat=60000/bpm;
-      const cost=gaps.reduce((sum,ms)=>{
-        const q=Math.max(.25,Math.round(ms/beat*4)/4);
-        return sum+Math.abs(ms/beat-q)+.015*Math.abs(Math.log2(q));
-      },0)/gaps.length+.0003*Math.abs(bpm-110);
-      if(cost<best.cost)best={cost,bpm};
-    }
-    return best.bpm;
-  },
-  transpose(pitches,steps){return pitches.map(p=>p===null?null:p+steps);},
-  ticks(ms,bpm){return Math.max(1,Math.round(ms*bpm/15000));},
-  validPitch(p){return p===null||(Number.isInteger(p)&&p>=12&&p<=127);},
-  playable(p){return p===null||(Number.isInteger(p)&&p>=69&&p<=89);}
-};
-
 const root=document.getElementById('oc93');if(root.dataset.ready)return;root.dataset.ready='1';
 const pcs={C:0,D:2,E:4,F:5,G:7,A:9,B:11},names=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
-const toMidi=s=>{const m=s.match(/^([A-G])(#?)(\d)$/);return (+m[3]+1)*12+pcs[m[1]]+(m[2]?1:0)};
+
 const score={
 events:[],tempo:130,tempoMap:[],meter:'4/4',key:'C',
 get pitches(){return this.events.map(e=>e.pitch);},
@@ -35,7 +14,7 @@ splice(index,remove,events=[]){
 this.events.splice(index,remove,...events.map(e=>({...e,ms:e.ms??null})));
 }
 };
-const name=m=>m===null?'Rest':names[((m%12)+12)%12]+(Math.floor(m/12)-1),hz=m=>440*Math.pow(2,(m-69)/12);
+const name=pitchName,hz=m=>440*Math.pow(2,(m-69)/12);
 const pads=[];
 function renderPads(){
 const grid=find('sequence');
