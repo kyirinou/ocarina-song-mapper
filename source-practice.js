@@ -27,6 +27,7 @@ if(prefix==='recognition'){recognitionNeedsRelease=false;showRecognitionInput(fa
 if(message)find(prefix+'-status').textContent=message;
 }
 async function listenMic(mode,onPitch){
+stopCustomRecording('Recording stopped to use the microphone elsewhere.');
 stopMic('Microphone stopped.');
 const startButton=find(mode+'-start');
 const stopButton=find(mode+'-stop');

@@ -50,6 +50,9 @@ Press Enter to step through a score and hold it to sustain a note. Use **Play al
 - **Recover recent work.**
   Edits create local recovery snapshots. Open **File → Recovery snapshots** to restore a copy or download its backup. Versioned projects, verified saves, and conflict warnings help protect saved scores. Keep a downloaded project backup before clearing browser data or switching devices.
 
+- **Record your own ocarina sound.**
+  Open **Settings → Ocarina sound → Custom Sound** and record all 21 pitches from A4 to F6. A live tuner and green circle require three continuous seconds within ±40 cents for each note. Each saved take automatically starts recording the next missing pitch with the microphone already on. Audition or replace recordings, then select **Use my ocarina** for note previews and song playback. Name and save custom sounds, keep separate versions with **Save as new**, switch saved sounds, or delete old ones. **Record again** continues through existing notes automatically. Recordings save separately in this browser.
+
 - **Explore the instrument.**
 The **Playable notes** page has all 21 pitches from A4 to F6 with keyboard shortcuts and fingering diagrams. Use **Settings** to choose a theme, interface font, or ocarina sound. **Help** includes a guided visual tutorial.
 

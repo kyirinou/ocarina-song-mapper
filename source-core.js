@@ -103,6 +103,7 @@ if(!window.jspdf.jsPDF.API.svg)await loadAsset('svg2pdf.js');
 await loadNotation();
 }
 function prepareSound(){
+if(soundChoice==='custom')return customLoaded?undefined:loadCustomSounds();
 if(soundChoice==='oc1'||window.osmSamples?.[soundChoice])return;
 return loadAsset(soundChoice+'.js');
 }
@@ -130,7 +131,7 @@ if(!voices.size)display.textContent='—';
 }
 function start(id,idx,m=score.events[idx]?.pitch){
 if(m==null||(id==='melody'&&score.events[idx]?.muted))return;
-const pending=prepareSound();
+const pending=id==='custom-audition'?undefined:prepareSound();
 if(pending){
 const selected=soundChoice, sequence=run, step=stepVersion;
 audio();
@@ -142,10 +143,10 @@ start(id,idx,m);
 }).catch(loadError);
 return;
 }
-if(micSession?.mode==='convert'||voices.has(id))return;
+if((customSession&&!(id==='custom-audition'&&customSession.ready&&!customSession.hold))||micSession?.mode==='convert'||voices.has(id))return;
 const a=audio();if(!a){info.textContent='Audio unavailable';return}
 const f=hz(m),t=a.currentTime,g=a.createGain();
-const synth=soundChoice==='oc1';
+const synth=soundChoice==='oc1'&&id!=='custom-audition';
 g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime((synth?.17:.45)*(id==='melody'?(score.events[idx]?.velocity??100)/100:1),t+(synth?.06:.012));g.connect(a.destination);
 const oscs=[];
 if(synth){
@@ -157,6 +158,12 @@ o.type='sine';o.frequency.value=f*h;amp.gain.value=vol;o.connect(amp);amp.connec
 v.frequency.value=5.2;depth.gain.value=f*h*.0017;v.connect(depth);depth.connect(o.frequency);
 o.start(t);v.start(t);oscs.push(o,v);
 }
+}else if(soundChoice==='custom'||id==='custom-audition'){
+const sample=customSoundBuffer(a,m),source=a.createBufferSource();
+source.buffer=sample.buffer;source.playbackRate.value=sample.rate;
+source.loop=true;source.connect(g);
+source.onended=()=>{source.disconnect();g.disconnect();};
+source.start(t);oscs.push(source);
 }else{
 const samples=window.osmSamples[soundChoice];
 const preset=samples.find(sample=>m<=sample[0])??samples.at(-1);
@@ -287,7 +294,7 @@ e.preventDefault();stopStep();
 },true);
 document.addEventListener('keydown',e=>{
 if(e.repeat){if(e.code===heldStepKey)e.preventDefault();return;}
-if(e.ctrlKey||e.metaKey||e.altKey||tutorial.open||find('scan-review').open||find('score-preview').open)return;
+if(e.ctrlKey||e.metaKey||e.altKey||soundSettings.open||tutorial.open||find('scan-review').open||find('score-preview').open)return;
 const enter=e.code==='Enter'||e.code==='NumpadEnter';
 if(editable(e.target)&&!(e.target===nativeTabText&&nativeTabText.readOnly))return;
 if(currentPage==='palette'){

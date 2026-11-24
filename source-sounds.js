@@ -9,7 +9,7 @@ for(const radio of soundRadios){
 radio.checked=radio.value===soundChoice;
 radio.addEventListener('change',()=>{
 if(!radio.checked)return;
-stopSoundSample();soundChoice=radio.value;prepareSound()?.catch(loadError);
+stopCustomRecording();stopCustomAudition();stopSound();stopSoundSample();soundChoice=radio.value;prepareSound()?.catch(loadError);
 try{localStorage.setItem('osm-ocarina-sound',soundChoice);}catch{}
 });
 }
@@ -68,4 +68,6 @@ for(const tab of settingsTabs)tab.onclick=()=>{
     find('settings-'+entry.dataset.settingsPanel).hidden=!active;
   }
   if(tab.dataset.settingsPanel!=='audio')stopSoundSample();
+  if(tab.dataset.settingsPanel!=='audio'){stopCustomRecording('Recording stopped.');stopCustomAudition();}
+  else loadCustomSounds().catch(()=>{});
 };

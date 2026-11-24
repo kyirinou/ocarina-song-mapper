@@ -6,6 +6,7 @@
 | --- | --- |
 | `lib/domain.mjs` | Pure pitch, transposition, rhythm, and project validation/migration rules |
 | `lib/project-store.mjs` | Versioned local storage, integrity checking, interrupted-write recovery, and recovery snapshots |
+| `lib/custom-sound.mjs`, `source-custom-sound.js` | Three-second tuner qualification, recorded sample loops, IndexedDB persistence, and custom sound settings |
 | `source-core.js` | Score state, synthesized/sample playback, keyboard stepping, Enter timing |
 | `source-projects.js` | Project UI, saved library, importing backups, and editing entry points |
 | `source-editor.js`, `source-note-actions.js`, `source-piano-roll.js` | Editing operations, selection, undo/redo, and piano-roll interaction |
